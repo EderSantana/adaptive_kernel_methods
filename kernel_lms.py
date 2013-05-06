@@ -93,6 +93,7 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         self.X_transformed_ = np.array([])
         self.growing_param = growing_param
         self.correntropy_sigma = correntropy_sigma
+        self.XX = 0
 
  
     """
@@ -129,8 +130,8 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         
         N = X.shape[0]
         self.centers_ = X[0]
-        if self.growing_param ~= "dense"
-            XX = np.sum(self.centers_*self.centers_,axis=1)[:, np.newaxis]
+        if self.growing_param != "dense":
+            self.XX = (self.centers_**2).sum()
         self.centerIndex_ = 0
         new_coeff = self.learning_rate * self._loss_derivative(d[0],0)
         self.coeff_ = np.append( self.coeff_, new_coeff );
@@ -139,7 +140,7 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         for k in range(1,N):
             gram = self._get_kernel(self.centers_,X[k])
             self.X_online_[k] = np.dot(self.coeff_, gram)
-            self._appendCenter(X[k], d[k], self.X_online_[k],k)
+            self._appendCenter(X[k], d[k], self.X_online_[k],k,self.XX)
         
         return self
 
@@ -178,7 +179,7 @@ class KernelLMS(BaseEstimator, TransformerMixin):
 
         return self.X_transformed_
  
-    def _appendCenter(self, newX, d, y, k):
+    def _appendCenter(self, newX, d, y, k, XX):
         """ Append centers to the networking following growing_criterion
             
         Returns
@@ -200,16 +201,15 @@ class KernelLMS(BaseEstimator, TransformerMixin):
             elif self.growing_criterion == "novelty":
                 """ The calculation of the euclidean distances were taking to much time. Using the expanded formula and storing the XX=X**2 terms will speeds things up.
                 """
-                distanc = euclidean_distances(newX, self.centers_, Y_norm_squared=XX,
-                                              squared=True)
+                distanc = euclidean_distances(newX, self.centers_,
+                                              Y_norm_squared=self.XX,                                 squared=True)
  
-                if max(distanc)>self.growing_param[0] and
-                                           np.abs(d-y)>self.growing_param[1]:
+                if np.max(distanc)>self.growing_param[0] and np.abs(d-y)>self.growing_param[1]:
                     self.centers_ = np.vstack([self.centers_, newX])
                     self.coeff_ = np.append(self.coeff_, self.learning_rate *
                                            self._loss_derivative(d, y))
                     self.centerIndex_ = [self.centerIndex_, k]
-                    XX = np.sum(self.centers_*self.centers_,axis=1)[:, np.newaxis]
+                    self.XX = (self.centers_**2).sum(axis=1)
         return self
 
     def _loss_derivative(self,d,y):
