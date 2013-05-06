@@ -129,6 +129,8 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         
         N = X.shape[0]
         self.centers_ = X[0]
+        if self.growing_param ~= "dense"
+            XX = np.sum(self.centers_*self.centers_,axis=1)[:, np.newaxis]
         self.centerIndex_ = 0
         new_coeff = self.learning_rate * self._loss_derivative(d[0],0)
         self.coeff_ = np.append( self.coeff_, new_coeff );
@@ -196,14 +198,18 @@ class KernelLMS(BaseEstimator, TransformerMixin):
                 self.centerIndex_ = [self.centerIndex_, k]
 
             elif self.growing_criterion == "novelty":
-                """ TODO: This calculation of euclidean distances are taking to much time. Using the expanded formula and storing the X**2 terms will speeds things up. In this mode, keeping all the centers provides faster results (I tried with 3e3 centers).
+                """ The calculation of the euclidean distances were taking to much time. Using the expanded formula and storing the XX=X**2 terms will speeds things up.
                 """
-                distanc = euclidean_distances(self.centers_, newX, squared=True)
-                if max(distanc)>self.growing_param[0] and np.abs(d-y)>self.growing_param[1]:
+                distanc = euclidean_distances(newX, self.centers_, Y_norm_squared=XX,
+                                              squared=True)
+ 
+                if max(distanc)>self.growing_param[0] and
+                                           np.abs(d-y)>self.growing_param[1]:
                     self.centers_ = np.vstack([self.centers_, newX])
                     self.coeff_ = np.append(self.coeff_, self.learning_rate *
                                            self._loss_derivative(d, y))
                     self.centerIndex_ = [self.centerIndex_, k]
+                    XX = np.sum(self.centers_*self.centers_,axis=1)[:, np.newaxis]
         return self
 
     def _loss_derivative(self,d,y):
