@@ -1,6 +1,6 @@
 """Kernel Least Mean Square Algorithm"""
 
-# Author: Eder Santana <edersantana@live.com>
+# Author: Eder Santana <edersantanajunior@hotmail.com>
 # License: BSD Style.
 
 import math

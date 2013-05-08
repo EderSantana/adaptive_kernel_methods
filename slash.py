@@ -58,8 +58,7 @@ def sMCI(x, y, ksize, y_neg_cum_sum_exp=None, y_pos_cum_sum_exp=None):
     if x.shape[0]==0 and y.shape[0]==0:
         return v
 
-    if not(np.isreal(ksize) and ksize>0):
-        raise Exception("Kernel size must be non-negative real")
+    assert (ksize>0. and np.isreal(ksize)), "Kernel size must be non-negative real"        
 
     x, y = check_n_spikes(x,y) # we are assuming sorted spike trins
 
