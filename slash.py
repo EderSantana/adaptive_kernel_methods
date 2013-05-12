@@ -356,6 +356,7 @@ def pNCI(X, y, ksize, gamma, X_neg_exp=None, X_pos_exp=None, \
     Output:
         V_k: exp(-gamma*squared_MCI_distance(X_k, y))  
     """
+    #if X is numpy array, then X = [X]    
     V = np.zeros(len(X));
     
     V = pMCIdistance(X, y, ksize, X_neg_exp=X_neg_exp, X_pos_exp=X_pos_exp,\
@@ -377,7 +378,8 @@ SPIKE_KERNEL_FUNCTIONS = {
     # If updating this dictionary, update the doc in both distance_metrics()
     # and also in pairwise_distances()!
     'mci': pMCI,
-    'nci': pNCI
+    'nci': pNCI,
+    'mcidistance': pMCIdistance
     }
 
 def spike_kernels():
@@ -400,6 +402,7 @@ def spike_kernels():
 KERNEL_PARAMS = {
     "mci": frozenset(["ksize"]),
     "nci": frozenset(["ksize", "gamma"]),
+    "mcidistance": frozenset(["ksize"])
 }
 
 def inner_prod(X, Y=None, spike_kernel="mci", filter_params=False, n_jobs=1, \
@@ -575,7 +578,8 @@ def test_InnerProd():
     params = {"gamma": .01,
               "ksize": .01}
     
-    V = inner_prod(X, y, spike_kernel="nci", **params)
+    V = inner_prod(X, y, spike_kernel="nci", n_jobs=1, filter_params=True \
+                  **params)
     print "Test_InnerProd V = [%10.5e, %10.5e]" % (V[0], V[1])
     return
     

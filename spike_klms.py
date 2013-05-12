@@ -1,45 +1,45 @@
-"""Kernel Least Mean Square Algorithm"""
+"""Spike Kernel Least Mean Square Algorithm"""
 
 # Author: Eder Santana <edersantanajunior@hotmail.com>
 # License: BSD Style.
 
 import numpy as np
+import slash
 
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics.pairwise import pairwise_kernels, euclidean_distances
 
 
-class KernelLMS(BaseEstimator, TransformerMixin):
-    """Kernel Least Mean Square Algorithm (KLMS)
+class SpikeKLMS(BaseEstimator, TransformerMixin):
+    """Spike Kernel Least Mean Square Algorithm (KLMS)
 
-    Non-linear filtering in feature space by linear filtering in Hilbert spaces
+    Non-linear filtering in spike times feature space by linear filtering in 
+    Hilbert spaces
 
     Parameters
     ----------
 
     learning_rate: float
-        Step size for gradient descent adaptation. This parameter is very important since regularizes the kernel method and, for a given data set, define convergence time and misadjustment
+        Step size for gradient descent adaptation. This parameter is very 
+        important since regularizes the kernel method and, for a given data set, 
+        define convergence time and misadjustment
 
     growing_criterion: "dense" | "novelty" | "surprise"
         Default: "dense:"
 
     growing_param: float, float, optional
 
-    kernel: "linear" | "poly" | "rbf" | "sigmoid" | "cosine" | "precomputed"
+    kernel: "mci" | "nci" 
         Kernel.
-        Default: "linear"
+        Default: "mci"
 
-    degree : int, default=3
-        Degree for poly, rbf and sigmoid kernels. Ignored by other kernels.
+    ksize : int, default=.01
+        Kernel size for mCI
 
     gamma : float, optional
-        Kernel coefficient for rbf and poly kernels. Default: 1/n_features.
-        Ignored by other kernels.
+        Kernel coefficient for nCI (ak. rbf of spike trains)
 
-    coef0 : float, optional
-        Independent term in poly and sigmoid kernels.
-        Ignored by other kernels.
-
+    TODO: add suuport to users custom spike kernels    
     kernel_params : mapping of string to any, optional
         Parameters (keyword arguments) and values for kernel passed as
         callable object. Ignored by other kernels.
@@ -53,10 +53,10 @@ class KernelLMS(BaseEstimator, TransformerMixin):
     ----------
     
     `X_online_`:
-        Projection of the fitted data while filter is trained
+        Projection of spike train data while filter is trained
 
     `X_transformed_`:
-        Projection of the fitted data on the trained filter
+        Projection of the spike train data on the trained filter
    
     `coeff_`:
         Filter coefficients
@@ -66,6 +66,9 @@ class KernelLMS(BaseEstimator, TransformerMixin):
 
      `centerIndex_`:
          Indexes of the input data kept as centers kept by the network
+         
+     `XX_`:
+         Transformations on centers_, this is stored to avoid extra calculations
 
     References
     ----------
@@ -73,8 +76,10 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         The Kernel LMS algorithm by Weifeng Liu et. al.
     """
 
-    def __init__(self, kernel="rbf", learning_rate=0.01, growing_criterion="dense", growing_param=None, loss_function="least_squares", loss_param=None,
-                 gamma=None, degree=3, coef0=1, kernel_params=None, correntropy_sigma=None):
+    def __init__(self, kernel="mci", learning_rate=0.01, growing_criterion="dense", \
+                 growing_param=None, loss_function="least_squares", \
+                 loss_param=None, gamma=None, ksize=0.01, kernel_params=None, \
+                 correntropy_sigma=None):
         self.kernel = kernel
         self.kernel_params = kernel_params
         self.learning_rate = learning_rate
@@ -82,8 +87,7 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         self.loss_param = loss_param
         self.growing_criterion = growing_criterion
         self.gamma = gamma
-        self.degree = degree
-        self.coef0 = coef0
+        self.ksize = ksize
         self.centers_ = np.array([])
         self.coeff_ = np.array([])
         self.centerIndex_ = []
@@ -105,9 +109,8 @@ class KernelLMS(BaseEstimator, TransformerMixin):
             params = self.kernel_params or {}
         else:
             params = {"gamma": self.gamma,
-                      "degree": self.degree,
-                      "coef0": self.coef0}
-        return pairwise_kernels(X, Y, metric=self.kernel,
+                      "ksize": self.ksize}
+        return slash.inner_prod(X, Y, spike_kernel=self.kernel,
                                 filter_params=True, **params)
 
     def fit(self, X, d, **params):
@@ -126,10 +129,11 @@ class KernelLMS(BaseEstimator, TransformerMixin):
             Returns the instance itself.
             """
         
-        N = X.shape[0]
+        N = len(X)
         self.centers_ = X[0]
         if self.growing_param != "dense":
-            self.XX = (self.centers_*self.centers_).sum()
+            # TODO: add this treatment [X] at SLASH
+            self.XX = self._get_kernel([X], X)
         self.centerIndex_ = 0
         new_coeff = self.learning_rate * self._loss_derivative(d[0],0)
         self.coeff_ = np.append( self.coeff_, new_coeff );
@@ -178,20 +182,20 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         return self.X_transformed_
  
     def _appendCenter(self, newX, d, y, k, XX):
-        """ Append centers to the networking following growing_criterion
+        """ Append centers to the network following growing_criterion
             
         Returns
         -------
             `self` with possibly larger centers_, coeff_ and centerIndex_
         """
         if self.coeff_.shape == 0:
-            self.centers_ = newX
+            self.centers_ = list([newX])
             self.coeff_ = np.append(self.coeff_, self.learning_rate *
                                    self._loss_derivative(d,y))
             self.centerIndex_ = k
         else:
             if self.growing_criterion == "dense":
-                self.centers_ = np.vstack([self.centers_, newX])
+                self.centers_.append(newX)                
                 self.coeff_ = np.append(self.coeff_, self.learning_rate *
                                         self._loss_derivative(d, y))
                 self.centerIndex_ = [self.centerIndex_, k]
@@ -199,15 +203,16 @@ class KernelLMS(BaseEstimator, TransformerMixin):
             elif self.growing_criterion == "novelty":
                 """ The calculation of the euclidean distances were taking to much time. Using the expanded formula and storing the XX=X**2 terms will speeds things up.
                 """
-                distanc = euclidean_distances(newX, self.centers_,
-                                              Y_norm_squared=self.XX,                                 squared=True)
+                _precalc = self.XX
+                distanc = slash.pMCIdistance(self.centers_, newX, \
+                                             ksize=self.ksize, **_precalc)
  
                 if np.max(distanc)>self.growing_param[0] and np.abs(d-y)>self.growing_param[1]:
-                    self.centers_ = np.vstack([self.centers_, newX])
+                    self.centers_.append(newX)
                     self.coeff_ = np.append(self.coeff_, self.learning_rate *
                                            self._loss_derivative(d, y))
                     self.centerIndex_ = [self.centerIndex_, k]
-                    self.XX = (self.centers_**2).sum(axis=1)
+                    self.XX = self._appendXX(newX)
         return self
 
     def _loss_derivative(self,d,y):
@@ -216,3 +221,33 @@ class KernelLMS(BaseEstimator, TransformerMixin):
             return d-y
         elif self.loss_function == "minimum_correntropy":
             return (d-y)*np.exp(-(d-y)**2/(2*self.correntropy_sigma**2))
+        else:
+            raise Exception("Invalid loss function: %s" % self.loss_function)
+            
+    def _appendXX(self, newX):
+        """Save precalculated data about centers to avoid repetitive 
+            calculations at SLASH Level II
+            """
+        x_pos_exp = np.exp(newX / self.ksize)
+        x_pos_cum_sum_exp = np.cumsum(x_pos_exp)
+        
+        x_neg_exp = np.exp(-newX / self.ksize)
+        x_neg_cum_sum_exp = np.flipud(x_neg_exp)
+        x_neg_cum_sum_exp = np.cumsum(x_neg_cum_sum_exp)
+        x_neg_cum_sum_exp = np.flipud(x_neg_cum_sum_exp)
+        
+        X_pos_exp = (self.XX).get("X_pos_exp")
+        X_pos_exp = np.append(X_pos_exp, x_pos_exp)
+        X_pos_cum_sum_exp = (self.XX).get("X_pos_cum_sum_exp")
+        X_pos_exp = np.append(X_pos_cum_sum_exp, x_pos_cum_sum_exp)
+        X_neg_exp = (self.XX).get("X_neg_exp")
+        X_neg_exp = np.append(X_neg_exp, x_neg_exp)
+        X_neg_cum_sum_exp = (self.XX).get("X_neg_cum_sum_exp")
+        X_neg_exp = np.append(X_neg_cum_sum_exp, x_neg_cum_sum_exp)
+        
+        (self.XX).updata({"X_neg_exp": X_neg_exp, "X_pos_exp": X_pos_exp,\
+        "X_neg_cum_sum_exp": X_neg_cum_sum_exp, \
+        "X_pos_cum_sum_exp": X_neg_cum_sum_exp
+        })
+            
+                
