@@ -7,7 +7,7 @@ import numpy as np
 import slash
 
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.metrics.pairwise import pairwise_kernels, euclidean_distances
+#from sklearn.metrics.pairwise import pairwise_kernels, euclidean_distances
 
 
 class SpikeKLMS(BaseEstimator, TransformerMixin):
@@ -84,8 +84,14 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         self.kernel_params = kernel_params
         self.learning_rate = learning_rate
         self.loss_function = loss_function
-        self.loss_param = loss_param
+        if self.loss_function != "least_squares":
+            self.loss_param = loss_param
+            if self.loss_function == "minimum_correntropy":
+                self.correntropy_sigma = correntropy_sigma
         self.growing_criterion = growing_criterion
+        if self.growing_criterion != "dense":
+            self.XX = []        
+            self.growing_param = growing_param
         self.gamma = gamma
         self.ksize = ksize
         self.centers_ = np.array([])
@@ -93,11 +99,7 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         self.centerIndex_ = []
         self.X_online_ = np.array([])
         self.X_transformed_ = np.array([])
-        self.growing_param = growing_param
-        self.correntropy_sigma = correntropy_sigma
-        self.XX = 0
-
- 
+        
     """
     TODO: add support for precomputed gram matrix to make fit_transform faster  
     @property
@@ -130,11 +132,14 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
             """
         
         N = len(X)
-        self.centers_ = X[0]
-        if self.growing_param != "dense":
-            # TODO: add this treatment [X] at SLASH
-            self.XX = self._get_kernel([X], X)
-        self.centerIndex_ = 0
+        self.centers_ = list([X[0]])
+        if self.growing_criterion != "dense":
+            self.XX = {"X_neg_exp":[], "X_pos_exp":[],\
+            "X_neg_cum_sum_exp":[], "X_pos_cum_sum_exp":[], "MCI11":[]}
+            self._appendXX(X[0])
+        
+        self.centerIndex_ = []
+        self.coeff_ = np.array([])
         new_coeff = self.learning_rate * self._loss_derivative(d[0],0)
         self.coeff_ = np.append( self.coeff_, new_coeff );
         self.X_online_ = np.zeros(N)
@@ -142,7 +147,7 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         for k in range(1,N):
             gram = self._get_kernel(self.centers_,X[k])
             self.X_online_[k] = np.dot(self.coeff_, gram)
-            self._appendCenter(X[k], d[k], self.X_online_[k],k,self.XX)
+            self._appendCenter(X[k], d[k], self.X_online_[k],k)
         
         return self
 
@@ -157,8 +162,10 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         -------
         Z_out: array-like, shape (n_samples)
         """
-       
-        Z_out = np.dot(self.coeff_, self._get_kernel(self.centers_,Z))
+        Z_out = range(len(Z))        
+        for i in xrange(len(Z)):
+            Z_out[i] = np.dot(self.coeff_, self._get_kernel(self.centers_,Z[i]))
+    
         return Z_out
 
     def fit_transform(self, X, d, **params):
@@ -181,7 +188,7 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
 
         return self.X_transformed_
  
-    def _appendCenter(self, newX, d, y, k, XX):
+    def _appendCenter(self, newX, d, y, k):
         """ Append centers to the network following growing_criterion
             
         Returns
@@ -201,18 +208,16 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
                 self.centerIndex_ = [self.centerIndex_, k]
 
             elif self.growing_criterion == "novelty":
-                """ The calculation of the euclidean distances were taking to much time. Using the expanded formula and storing the XX=X**2 terms will speeds things up.
-                """
-                _precalc = self.XX
                 distanc = slash.pMCIdistance(self.centers_, newX, \
-                                             ksize=self.ksize, **_precalc)
+                                             ksize=self.ksize, **self.XX)
  
-                if np.max(distanc)>self.growing_param[0] and np.abs(d-y)>self.growing_param[1]:
+                if np.max(distanc)>self.growing_param[0] and \
+                np.abs(d-y)>self.growing_param[1]:
                     self.centers_.append(newX)
                     self.coeff_ = np.append(self.coeff_, self.learning_rate *
                                            self._loss_derivative(d, y))
-                    self.centerIndex_ = [self.centerIndex_, k]
-                    self.XX = self._appendXX(newX)
+                    self.centerIndex_.append(k)
+                    self._appendXX(newX)
         return self
 
     def _loss_derivative(self,d,y):
@@ -228,26 +233,34 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         """Save precalculated data about centers to avoid repetitive 
             calculations at SLASH Level II
             """
-        x_pos_exp = np.exp(newX / self.ksize)
-        x_pos_cum_sum_exp = np.cumsum(x_pos_exp)
+        x_pos_exp = x_neg_exp = x_neg_cum_sum_exp = x_pos_cum_sum_exp = np.array(0.)[np.newaxis]
+        if newX.shape[0]>0:
+            x_pos_exp = np.exp(newX / self.ksize)
+            x_pos_cum_sum_exp = np.cumsum(x_pos_exp)
         
-        x_neg_exp = np.exp(-newX / self.ksize)
-        x_neg_cum_sum_exp = np.flipud(x_neg_exp)
-        x_neg_cum_sum_exp = np.cumsum(x_neg_cum_sum_exp)
-        x_neg_cum_sum_exp = np.flipud(x_neg_cum_sum_exp)
+            x_neg_exp = np.exp(-newX / self.ksize)
+            x_neg_cum_sum_exp = np.flipud(x_neg_exp)
+            x_neg_cum_sum_exp = np.cumsum(x_neg_cum_sum_exp)
+            x_neg_cum_sum_exp = np.flipud(x_neg_cum_sum_exp)
         
-        X_pos_exp = (self.XX).get("X_pos_exp")
-        X_pos_exp = np.append(X_pos_exp, x_pos_exp)
-        X_pos_cum_sum_exp = (self.XX).get("X_pos_cum_sum_exp")
-        X_pos_exp = np.append(X_pos_cum_sum_exp, x_pos_cum_sum_exp)
-        X_neg_exp = (self.XX).get("X_neg_exp")
-        X_neg_exp = np.append(X_neg_exp, x_neg_exp)
-        X_neg_cum_sum_exp = (self.XX).get("X_neg_cum_sum_exp")
-        X_neg_exp = np.append(X_neg_cum_sum_exp, x_neg_cum_sum_exp)
-        
-        (self.XX).updata({"X_neg_exp": X_neg_exp, "X_pos_exp": X_pos_exp,\
-        "X_neg_cum_sum_exp": X_neg_cum_sum_exp, \
-        "X_pos_cum_sum_exp": X_neg_cum_sum_exp
-        })
-            
-                
+        self.XX["X_pos_exp"].append(x_pos_exp)
+        self.XX["X_neg_exp"].append(x_neg_exp)
+        self.XX["X_pos_cum_sum_exp"].append(x_pos_cum_sum_exp)
+        self.XX["X_neg_cum_sum_exp"].append(x_neg_cum_sum_exp) 
+        self.XX["MCI11"].append(self._mci(newX)) 
+        return self
+
+    def _mci(self, newX):
+        mci = 0
+        for k in xrange(newX.shape[0]):
+            if k == 1:
+                mci = mci + self.XX["X_pos_exp"][-1][0] * \
+                    self.XX["X_neg_cum_sum_exp"][-1][0]
+            elif k == newX.shape[0]-1:
+                mci = mci + self.XX["X_neg_exp"][-1][-1] * \
+                self.XX["X_pos_cum_sum_exp"][-1][-1]
+            else:
+                mci = mci + self.XX["X_pos_cum_sum_exp"][-1][k] * \
+                self.XX["X_neg_exp"][-1][k] + self.XX["X_pos_exp"][-1][k] * \
+                self.XX["X_neg_cum_sum_exp"][-1][(k+1)]
+        return mci

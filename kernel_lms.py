@@ -128,7 +128,7 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         
         N = X.shape[0]
         self.centers_ = X[0]
-        if self.growing_param != "dense":
+        if self.growing_criterion != "dense":
             self.XX = (self.centers_*self.centers_).sum()
         self.centerIndex_ = 0
         new_coeff = self.learning_rate * self._loss_derivative(d[0],0)

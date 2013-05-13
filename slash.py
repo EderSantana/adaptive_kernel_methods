@@ -30,6 +30,17 @@ SLASH - Level I
 ====================
 """
 
+def check_population(X):
+    if not(isinstance(X, list)):
+        X = list([X])
+    return X
+
+def check_spike_train(x):
+    if x.shape:
+        return x #takes only the first value
+    else:
+        return (x[np.newaxis])
+
 def check_n_spikes(x, y=None, sort_flag=False):
     """
     For the remaining of the code, it is more efficient to use y as the longer spike train.
@@ -81,11 +92,11 @@ def sMCI(x, y, ksize, y_neg_cum_sum_exp=None, y_pos_cum_sum_exp=None):
         x_pos_exp = np.exp(x / ksize)
         x_neg_exp = np.exp(-x / ksize)
         
-        if y_pos_cum_sum_exp is None:
+        if y_pos_cum_sum_exp is None or y_pos_cum_sum_exp is []:
             y_pos_cum_sum_exp = np.exp(y / ksize)
             y_pos_cum_sum_exp = np.cumsum(y_pos_cum_sum_exp)
         
-        if y_neg_cum_sum_exp is None:
+        if y_neg_cum_sum_exp is None or y_neg_cum_sum_exp is []:
             y_neg_cum_sum_exp = np.exp(-y / ksize)
             y_neg_cum_sum_exp = np.flipud(y_neg_cum_sum_exp)
             y_neg_cum_sum_exp = np.cumsum(y_neg_cum_sum_exp)
@@ -124,7 +135,8 @@ def sMCIdistance(x, y, ksize, x_neg_exp=None, x_pos_exp=None, \
 
     assert (ksize>0. and np.isreal(ksize)), "Kernel size must be non-negative real"        
 
-    if (x_neg_cum_sum_exp is None) and (x_pos_cum_sum_exp is None):
+    if x_neg_cum_sum_exp is None or (x_pos_cum_sum_exp is None) or \
+    x_neg_cum_sum_exp is [] or (x_pos_cum_sum_exp is []):
         x, y = check_n_spikes(x,y) # we are assuming sorted spike trins
 
     # first, verify if inputs are equal
@@ -139,7 +151,7 @@ def sMCIdistance(x, y, ksize, x_neg_exp=None, x_pos_exp=None, \
         mci12 = np.sum( np.exp(-mci12) )        
         mci22 = pairwise_l1(y, y) / ksize
         mci22 = np.sum( np.exp(-mci22) ) 
-        if mci11 is None:
+        if mci11 is None or mci11 is []:
             mci11 = pairwise_l1(x, x) / ksize
             mci11 = np.sum( np.exp(-mci11) )
         
@@ -148,7 +160,7 @@ def sMCIdistance(x, y, ksize, x_neg_exp=None, x_pos_exp=None, \
         mci12 = pairwise_l1(x, y) / ksize
         mci12 = np.sum( np.exp(-mci12) )
         mci22 = sMCI(y, y, ksize)
-        if mci11 is None:
+        if mci11 is None or mci11 is []:
             mci11 = pairwise_l1(x, x) / ksize            
             mci11 = np.sum( np.exp(-mci11) )        
             
@@ -156,7 +168,7 @@ def sMCIdistance(x, y, ksize, x_neg_exp=None, x_pos_exp=None, \
         mci12 = pairwise_l1(x, y) / ksize
         mci12 = np.sum( np.exp(-mci12) )
         mci22 = pairwise_l1(y, y) / ksize
-        if mci22 is None:
+        if mci11 is None or mci11 is []:
             mci11 = np.sum( np.exp(-mci22) )
             mci11 = sMCI(x, x, ksize)
             
@@ -175,11 +187,11 @@ def sMCIdistance(x, y, ksize, x_neg_exp=None, x_pos_exp=None, \
         y_neg_cum_sum_exp = np.flipud(y_neg_cum_sum_exp)        
         
         
-        if  x_pos_cum_sum_exp is None:            
+        if  x_pos_cum_sum_exp is None or x_pos_cum_sum_exp is []:            
             x_pos_exp = np.exp(x / ksize)
             x_pos_cum_sum_exp = np.cumsum(x_pos_exp)     
             
-        if x_neg_cum_sum_exp is None:
+        if x_neg_cum_sum_exp is None or x_neg_cum_sum_exp is []:
             x_neg_exp = np.exp(-x / ksize)
             x_neg_cum_sum_exp = np.flipud(x_neg_exp)
             x_neg_cum_sum_exp = np.cumsum(x_neg_cum_sum_exp)
@@ -187,7 +199,7 @@ def sMCIdistance(x, y, ksize, x_neg_exp=None, x_pos_exp=None, \
        
        
         # mci(x , x)
-        if mci11 is None:
+        if mci11 is None or mci11 is []:
             mci11 = 0
             for xidx in range(x.shape[0]):
                 if xidx == 1:
@@ -269,12 +281,15 @@ def pMCI(X, y, ksize, y_neg_cum_sum_exp=None, y_pos_cum_sum_exp=None):
         Output:
          V_k: (numpy.array) sum_i sum_j exp(-|x_k[i] - y[j]|/ksize)
     """
+    X = check_population(X)
+    y = check_spike_train(y)
+    
     V = np.zeros(len(X));
-    if y_pos_cum_sum_exp is None:
+    if y_pos_cum_sum_exp is None or y_pos_cum_sum_exp is []:
        y_pos_cum_sum_exp = np.exp(y / ksize)
        y_pos_cum_sum_exp = np.cumsum(y_pos_cum_sum_exp)
             
-    if y_neg_cum_sum_exp is None:
+    if y_neg_cum_sum_exp is None or y_neg_cum_sum_exp is []:
        y_neg_cum_sum_exp = np.exp(-y / ksize)
        y_neg_cum_sum_exp = np.flipud(y_neg_cum_sum_exp)
        y_neg_cum_sum_exp = np.cumsum(y_neg_cum_sum_exp)
@@ -298,13 +313,17 @@ def pMCIdistance(X, y, ksize, X_neg_exp=None, X_pos_exp=None, \
     Output:
         V_k: (numpy.array) mci(X_i, X_i) + mci(y, y) - 2*mci(X_i, y)
     """
+    X = check_population(X)
+    y = check_spike_train(y)    
+    
     V = np.zeros(len(X));
     
     # This avoids repetitive computations at the mci based distance step
     # This current implementations allows full or no knowledge about X    
     # TODO: allows input of knowledge about only few spike trains
-    if X_neg_exp is None or X_pos_exp is None or X_neg_cum_sum_exp is None \
-    or X_pos_cum_sum_exp is None:     
+    if X_neg_exp is None or X_pos_exp is None or X_neg_cum_sum_exp is None or \
+    X_pos_cum_sum_exp is None or X_neg_exp is [] or X_pos_exp is [] or \
+    X_neg_cum_sum_exp is [] or X_pos_cum_sum_exp is []:     
         X_pos_exp = range(len(X))
         X_neg_exp = range(len(X))
         X_neg_cum_sum_exp = range(len(X))
@@ -318,7 +337,7 @@ def pMCIdistance(X, y, ksize, X_neg_exp=None, X_pos_exp=None, \
             X_neg_cum_sum_exp[idx] = np.cumsum(X_neg_cum_sum_exp[idx])
             X_neg_cum_sum_exp[idx] = np.flipud(X_neg_cum_sum_exp[idx])    
     
-    if MCI11 is None:
+    if MCI11 is None or MCI11 is []:
         MCI11 = range(len(X))        
         for idx in xrange(len(X)):
             # This means zero optimization! Sometimes the "population" X is just 
@@ -337,10 +356,23 @@ def pMCIdistance(X, y, ksize, X_neg_exp=None, X_pos_exp=None, \
                     X_neg_exp[idx][k] + X_pos_exp[idx][k] * X_neg_cum_sum_exp[idx][k+1]
         
     for idx in xrange(len(X)):
-        V[idx] = sMCIdistance(X[idx], y, ksize, x_neg_exp = X_neg_exp[idx], \
-                x_pos_exp=X_pos_exp[idx], x_neg_cum_sum_exp=X_neg_cum_sum_exp[idx],\
-                x_pos_cum_sum_exp=X_pos_cum_sum_exp[idx], mci11=MCI11[idx])
-
+        """        
+        print "X = %i" % idx
+        print X[idx]
+        print X_pos_cum_sum_exp[idx].shape
+        print X_neg_cum_sum_exp[idx].shape 
+        print X_pos_exp[idx].shape
+        print X_neg_exp[idx].shape 
+        """
+        """
+        V[idx] = sMCIdistance(X[idx], y, ksize, x_neg_exp = X_neg_exp[idx] \
+                ,x_pos_exp=X_pos_exp[idx], \
+                x_neg_cum_sum_exp=X_neg_cum_sum_exp[idx], mci11=MCI11[idx], \
+                x_pos_cum_sum_exp=X_pos_cum_sum_exp[idx])         
+        """
+        
+        V[idx] = sMCIdistance(X[idx], y, ksize)
+    
     return V
     
 def pNCI(X, y, ksize, gamma, X_neg_exp=None, X_pos_exp=None, \
@@ -356,7 +388,9 @@ def pNCI(X, y, ksize, gamma, X_neg_exp=None, X_pos_exp=None, \
     Output:
         V_k: exp(-gamma*squared_MCI_distance(X_k, y))  
     """
-    #if X is numpy array, then X = [X]    
+    X = check_population(X)
+    y = check_spike_train(y)
+    
     V = np.zeros(len(X));
     
     V = pMCIdistance(X, y, ksize, X_neg_exp=X_neg_exp, X_pos_exp=X_pos_exp,\
