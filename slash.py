@@ -324,10 +324,10 @@ def pMCIdistance(X, y, ksize, X_neg_exp=None, X_pos_exp=None, \
     if X_neg_exp is None or X_pos_exp is None or X_neg_cum_sum_exp is None or \
     X_pos_cum_sum_exp is None or X_neg_exp is [] or X_pos_exp is [] or \
     X_neg_cum_sum_exp is [] or X_pos_cum_sum_exp is []:     
-        X_pos_exp = range(len(X))
-        X_neg_exp = range(len(X))
-        X_neg_cum_sum_exp = range(len(X))
-        X_pos_cum_sum_exp = range(len(X))
+        X_pos_exp = [{} for i in range(len(X))]
+        X_neg_exp = [{} for i in range(len(X))]
+        X_neg_cum_sum_exp = [{} for i in range(len(X))]
+        X_pos_cum_sum_exp = [{} for i in range(len(X))]
         for idx in xrange(len(X)):
             X_pos_exp[idx] = np.exp(-X[idx] / ksize)
             X_pos_cum_sum_exp[idx] = np.cumsum(X_pos_exp[idx])
@@ -338,7 +338,7 @@ def pMCIdistance(X, y, ksize, X_neg_exp=None, X_pos_exp=None, \
             X_neg_cum_sum_exp[idx] = np.flipud(X_neg_cum_sum_exp[idx])    
     
     if MCI11 is None or MCI11 is []:
-        MCI11 = range(len(X))        
+        MCI11 = [{} for i in range(len(X))]
         for idx in xrange(len(X)):
             # This means zero optimization! Sometimes the "population" X is just 
             #     sliding versions os a spike train. This can be exploited to avoid
@@ -399,6 +399,87 @@ def pNCI(X, y, ksize, gamma, X_neg_exp=None, X_pos_exp=None, \
     V *= -gamma
     V = np.exp(V)
     return V
+
+"""
+====================
+SLASH - Level III
+====================
+"""
+# At this level populations of spike trains should be input in lists, even if 
+# there is only one population
+
+def ppMCI(Xx,Y, ksize, Xx_neg_exp=None, Xx_pos_exp=None):
+            
+    if Xx_pos_exp is None or Xx_pos_exp is []:
+        Xx_pos_exp = [{} for i in range(len(Xx))]
+        Xx_neg_exp = [{} for i in range(len(Xx))]
+        for i in xrange(len(Xx)):
+            for k in xrange(len(Xx[i])):
+                Xx_pos_exp[i][k] = np.exp(Xx[i][k] / ksize)
+                Xx_neg_exp[i][k] = np.exp(-Xx[i][k] / ksize)
+                
+    Y_pos_exp = [{} for i in range(len(Y))]
+    Y_pos_cum_sum_exp = [{} for i in range(len(Y))]
+    Y_neg_exp = [{} for i in range(len(Y))]
+    Y_neg_cum_sum_exp = [{} for i in range(len(Y))]
+    for i in xrange(len(Y)):
+        Y_pos_exp[i] = np.exp(Y[i] / ksize)
+        Y_pos_cum_sum_exp[i] = np.cumsum(Y_pos_exp[i])
+        
+        Y_neg_exp[i] = np.exp(-Y[i] / ksize)
+        Y_neg_cum_sum_exp[i] = np.flipud(Y_neg_exp[i])
+        Y_neg_cum_sum_exp[i] = np.cumsum(Y_neg_cum_sum_exp[i])
+        Y_neg_cum_sum_exp[i] = np.flipud(Y_neg_cum_sum_exp[i])
+
+    V = np.zeros(len(Xx))
+    for pidx in xrange(len(Xx)):
+        for sidx in xrange(len(Xx[pidx])):
+            V[pidx] = V[pidx] + sMCI(Xx[pidx][sidx], Y[sidx], ksize, \
+            y_neg_cum_sum_exp=Y_neg_cum_sum_exp[sidx], \
+            y_pos_cum_sum_exp=Y_pos_cum_sum_exp[sidx])
+    
+    return V
+
+def ppMCIdistance(Xx,Y, ksize, Xx_neg_exp=None, Xx_pos_exp=None):
+            
+    if Xx_pos_exp is None or Xx_pos_exp is []:
+        Xx_pos_exp = [{} for i in range(len(Xx))]
+        Xx_neg_exp = [{} for i in range(len(Xx))]
+        Xx_pos_cum_sum_exp = [{} for i in range(len(Xx))]
+        Xx_neg_cum_sum_exp = [{} for i in range(len(Xx))]
+        MCI11 = [{} for i in range(len(Xx))]
+        for i in xrange(len(Xx)):
+            for k in xrange(len(Xx[i])):
+                Xx_pos_exp[i][k] = np.exp(Xx[i][k] / ksize)
+                Xx_pos_cum_sum_exp[i][k] = np.cumsum(Xx_pos_exp[i][k])                
+                Xx_neg_exp[i][k] = np.exp(-Xx[i][k] / ksize)
+                Xx_neg_cum_sum_exp[i][k] = np.flipud(Xx_neg_exp[i][k])
+                Xx_neg_cum_sum_exp[i][k] = np.cumsum(Xx_neg_cum_sum_exp[i][k])
+                Xx_neg_cum_sum_exp[i][k] = np.flipud(Xx_neg_cum_sum_exp[i][k])
+                MCI11 = 
+                
+    Y_pos_exp = [{} for i in range(len(Y))]
+    Y_pos_cum_sum_exp = [{} for i in range(len(Y))]
+    Y_neg_exp = [{} for i in range(len(Y))]
+    Y_neg_cum_sum_exp = [{} for i in range(len(Y))]
+    for i in xrange(len(Y)):
+        Y_pos_exp[i] = np.exp(Y[i] / ksize)
+        Y_pos_cum_sum_exp[i] = np.cumsum(Y_pos_exp[i])
+        
+        Y_neg_exp[i] = np.exp(-Y[i] / ksize)
+        Y_neg_cum_sum_exp[i] = np.flipud(Y_neg_exp[i])
+        Y_neg_cum_sum_exp[i] = np.cumsum(Y_neg_cum_sum_exp[i])
+        Y_neg_cum_sum_exp[i] = np.flipud(Y_neg_cum_sum_exp[i])
+
+    V = np.zeros(len(Xx))
+    for pidx in xrange(len(Xx)):
+        for sidx in xrange(len(Xx[pidx])):
+            V[pidx] = V[pidx] + sMCIdistance(Xx[pidx][sidx], Y[sidx], ksize, \
+            y_neg_cum_sum_exp=Y_neg_cum_sum_exp[sidx], \
+            y_pos_cum_sum_exp=Y_pos_cum_sum_exp[sidx])
+    
+    return V
+
     
     
 """
@@ -552,7 +633,21 @@ def _parallel_inner_prod(X, Y, func, n_jobs, **kwds):
         for s in gen_even_slices(len(X), n_jobs))
 
     return np.hstack(ret)
-
+    
+def _mci(x, x_neg_exp, x_pos_exp, x_neg_cum_sum_exp, x_pos_cum_sum_exp):
+        mci = 0
+        for k in xrange(x.shape[0]):
+            if k == 1:
+                mci = mci + x_pos_exp[0] * \
+                    xX_neg_cum_sum_exp[0]
+            elif k == newX.shape[0]-1:
+                mci = mci + x_neg_exp[-1] * \
+                x_pos_cum_sum_exp[-1]
+            else:
+                mci = mci + self.XX["X_pos_cum_sum_exp"][-1][k] * \
+                self.XX["X_neg_exp"][-1][k] + self.XX["X_pos_exp"][-1][k] * \
+                self.XX["X_neg_cum_sum_exp"][-1][(k+1)]
+        return mci
 
 """
 ====================

@@ -162,7 +162,8 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         -------
         Z_out: array-like, shape (n_samples)
         """
-        Z_out = range(len(Z))        
+        Z_out = [{} for i in range(len(Z))]
+        
         for i in xrange(len(Z)):
             Z_out[i] = np.dot(self.coeff_, self._get_kernel(self.centers_,Z[i]))
     
