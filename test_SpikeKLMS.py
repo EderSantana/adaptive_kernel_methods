@@ -17,8 +17,9 @@ for i in xrange(len(X)):
     X[i] = squeeze(sts[i,0])
     if not(X[i].shape):
         X[i] = X[i][newaxis]
+
 d   = squeeze(loadmat("targets.mat").get("targets"))
 t   = linspace(1,500,500)
-sklms = SpikeKLMS(learning_rate=.09, ksize=.005, growing_criterion="novelty",\
+sklms = SpikeKLMS(kernel="mci", gamma=.05, learning_rate=.1, ksize=.005, growing_criterion="novelty",\
 growing_param = [.1, .01])
 sklms.fit_transform(X, d)

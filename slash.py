@@ -135,7 +135,7 @@ def sMCIdistance(x, y, ksize, x_neg_exp=None, x_pos_exp=None, \
 
     assert (ksize>0. and np.isreal(ksize)), "Kernel size must be non-negative real"        
 
-    if x_neg_cum_sum_exp is None or (x_pos_cum_sum_exp is None) or \
+    if x_neg_cum_sum_exp is None or x_pos_cum_sum_exp is None or \
     x_neg_cum_sum_exp is [] or (x_pos_cum_sum_exp is []):
         x, y = check_n_spikes(x,y) # we are assuming sorted spike trins
 
@@ -356,21 +356,20 @@ def pMCIdistance(X, y, ksize, X_neg_exp=None, X_pos_exp=None, \
                     X_neg_exp[idx][k] + X_pos_exp[idx][k] * X_neg_cum_sum_exp[idx][k+1]
         
     for idx in xrange(len(X)):
-        """        
-        print "X = %i" % idx
-        print X[idx]
-        print X_pos_cum_sum_exp[idx].shape
-        print X_neg_cum_sum_exp[idx].shape 
-        print X_pos_exp[idx].shape
-        print X_neg_exp[idx].shape 
-        """
-        """
-        V[idx] = sMCIdistance(X[idx], y, ksize, x_neg_exp = X_neg_exp[idx] \
-                ,x_pos_exp=X_pos_exp[idx], \
-                x_neg_cum_sum_exp=X_neg_cum_sum_exp[idx], mci11=MCI11[idx], \
-                x_pos_cum_sum_exp=X_pos_cum_sum_exp[idx])         
-        """
         
+        #import pdb; pdb.set_trace()        
+        """
+        x_neg_exp = X_neg_exp[idx]
+        x_pos_exp=X_pos_exp[idx]
+        x_neg_cum_sum_exp=X_neg_cum_sum_exp[idx] 
+        x_pos_cum_sum_exp=X_pos_cum_sum_exp[idx]        
+        mci11=MCI11[idx]
+        """
+        #TODO: Find out why we sometimes get "ValueError: setting an array element with a sequence."
+        #try:        
+        #    V[idx] = sMCIdistance(X[idx], y, ksize, x_neg_exp, x_pos_exp, \
+        #        x_neg_cum_sum_exp, x_pos_cum_sum_exp, mci11)         
+        #except:
         V[idx] = sMCIdistance(X[idx], y, ksize)
     
     return V
@@ -456,7 +455,7 @@ def ppMCIdistance(Xx,Y, ksize, Xx_neg_exp=None, Xx_pos_exp=None):
                 Xx_neg_cum_sum_exp[i][k] = np.flipud(Xx_neg_exp[i][k])
                 Xx_neg_cum_sum_exp[i][k] = np.cumsum(Xx_neg_cum_sum_exp[i][k])
                 Xx_neg_cum_sum_exp[i][k] = np.flipud(Xx_neg_cum_sum_exp[i][k])
-                MCI11 = 
+                #MCI11 = 
                 
     Y_pos_exp = [{} for i in range(len(Y))]
     Y_pos_cum_sum_exp = [{} for i in range(len(Y))]
@@ -651,7 +650,7 @@ def _mci(x, x_neg_exp, x_pos_exp, x_neg_cum_sum_exp, x_pos_cum_sum_exp):
 
 """
 ====================
-TESTS
+TESTS  
 ====================
 """
 def test_sMCI():
@@ -711,4 +710,3 @@ def test_InnerProd():
                   **params)
     print "Test_InnerProd V = [%10.5e, %10.5e]" % (V[0], V[1])
     return
-    

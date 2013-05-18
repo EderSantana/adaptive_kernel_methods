@@ -28,6 +28,10 @@ class KernelLMS(BaseEstimator, TransformerMixin):
     kernel: "linear" | "poly" | "rbf" | "sigmoid" | "cosine" | "precomputed"
         Kernel.
         Default: "linear"
+        
+    learning_mode: "regression" | "classify"
+        Determines the transformation over the output. If "regression" mode is selected, no transformation is performed. If in "classification" mode, KLMS is trained with a sigmoid transformation over its linear output.
+        Default: "regression"
 
     degree : int, default=3
         Degree for poly, rbf and sigmoid kernels. Ignored by other kernels.
@@ -73,9 +77,12 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         The Kernel LMS algorithm by Weifeng Liu et. al.
     """
 
-    def __init__(self, kernel="rbf", learning_rate=0.01, growing_criterion="dense", growing_param=None, loss_function="least_squares", loss_param=None,
-                 gamma=None, degree=3, coef0=1, kernel_params=None, correntropy_sigma=None):
+    def __init__(self, kernel="rbf", learning_mode="regression", learning_rate=0.01, \
+                 growing_criterion="dense", growing_param=None, loss_function="least_squares", \
+                 loss_param=None, gamma=None, degree=3, coef0=1, kernel_params=None, \
+                 correntropy_sigma=None):
         self.kernel = kernel
+        self.l_mode = learning_mode
         self.kernel_params = kernel_params
         self.learning_rate = learning_rate
         self.loss_function = loss_function
@@ -110,7 +117,7 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         return pairwise_kernels(X, Y, metric=self.kernel,
                                 filter_params=True, **params)
 
-    def fit(self, X, d, **params):
+    def fit(self, X, d):
         """Fit the model from data in X.
             
             Parameters
@@ -126,19 +133,23 @@ class KernelLMS(BaseEstimator, TransformerMixin):
             Returns the instance itself.
             """
         
-        N = X.shape[0]
-        self.centers_ = X[0]
-        if self.growing_criterion != "dense":
-            self.XX = (self.centers_*self.centers_).sum()
-        self.centerIndex_ = 0
-        new_coeff = self.learning_rate * self._loss_derivative(d[0],0)
-        self.coeff_ = np.append( self.coeff_, new_coeff );
-        self.X_online_ = np.zeros(N)
+        Nend = X.shape[0]
+        N1 = 0
+        if self.centers_.shape[0]==0:
+            self.centers_ = X[0]
+            if self.growing_criterion != "dense":
+                self.XX = (self.centers_*self.centers_).sum()
+            self.centerIndex_ = [0]
+            #import pdb; pdb.set_trace()            
+            new_coeff = 1 #self.learning_rate * self._loss_derivative(d[0],0)
+            self.coeff_ = np.append( self.coeff_, new_coeff );
+            self.X_online_ = np.zeros(Nend)
+            N1 = 1 
         
-        for k in range(1,N):
-            gram = self._get_kernel(self.centers_,X[k])
+        for k in xrange(N1,Nend):
+            gram = self._get_kernel(self.centers_, X[k])
             self.X_online_[k] = np.dot(self.coeff_, gram)
-            self._appendCenter(X[k], d[k], self.X_online_[k],k,self.XX)
+            self._trainNet(X[k], d[k], self.X_online_[k],k,self.XX)
         
         return self
 
@@ -155,6 +166,9 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         """
        
         Z_out = np.dot(self.coeff_, self._get_kernel(self.centers_,Z))
+        if self.l_mode == "classify":
+            Z_out = _sigmoid(Z_out, 0)
+        
         return Z_out
 
     def fit_transform(self, X, d, **params):
@@ -173,28 +187,49 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         """
         self.fit(X, d, **params)
 
-        self.X_transformed_ = self.transform(X)
+        self.X_transformed_ = np.hstack([self.X_transformed_, self.transform(X)])
 
         return self.X_transformed_
  
-    def _appendCenter(self, newX, d, y, k, XX):
+    def _trainNet(self, newX, d, y, k, XX):
         """ Append centers to the networking following growing_criterion
             
         Returns
         -------
             `self` with possibly larger centers_, coeff_ and centerIndex_
         """
-        if self.coeff_.shape == 0:
+        if self.coeff_.shape[0] == 0:
             self.centers_ = newX
-            self.coeff_ = np.append(self.coeff_, self.learning_rate *
+            
+            if self.l_mode == "regression":
+                self.coeff_ = np.append(self.coeff_, self.learning_rate *
                                    self._loss_derivative(d,y))
-            self.centerIndex_ = k
+            elif self.l_mode == "classify":
+                self.coeff_ = np.append(self.coeff_, \
+                              _sigmoid(y,1) * self.learning_rate * \
+                              self._loss_derivative(d,_sigmoid(y,0)))
+            else:
+                assert self.l_mode=="regression" or self.l_mode=="classify"
+        
+            self.centerIndex_ = [k]
+    
         else:
             if self.growing_criterion == "dense":
                 self.centers_ = np.vstack([self.centers_, newX])
-                self.coeff_ = np.append(self.coeff_, self.learning_rate *
-                                        self._loss_derivative(d, y))
-                self.centerIndex_ = [self.centerIndex_, k]
+                    #self.coeff_ = np.append(self.coeff_, self.learning_rate *
+                    #                   self._loss_derivative(d, y))
+
+                if self.l_mode == "regression":
+                    self.coeff_ = np.append(self.coeff_, self.learning_rate *
+                                        self._loss_derivative(d,y))
+                elif self.l_mode == "classify":
+                    self.coeff_ = np.append(self.coeff_, \
+                                        _sigmoid(y,1) * self.learning_rate * \
+                                        self._loss_derivative(d,_sigmoid(y,0)))
+                else:
+                    assert self.l_mode=="regression" or self.l_mode=="classify"
+               
+                self.centerIndex_.append(k)
 
             elif self.growing_criterion == "novelty":
                 """ The calculation of the euclidean distances were taking to much time. Using the expanded formula and storing the XX=X**2 terms will speeds things up.
@@ -206,13 +241,27 @@ class KernelLMS(BaseEstimator, TransformerMixin):
                     self.centers_ = np.vstack([self.centers_, newX])
                     self.coeff_ = np.append(self.coeff_, self.learning_rate *
                                            self._loss_derivative(d, y))
-                    self.centerIndex_ = [self.centerIndex_, k]
+                    self.centerIndex_.append(k)
                     self.XX = (self.centers_**2).sum(axis=1)
         return self
 
     def _loss_derivative(self,d,y):
         """ Evaluate the derivative of loss_function on d, y """
         if self.loss_function == "least_squares":
-            return d-y
+            ldiff = d-y
         elif self.loss_function == "minimum_correntropy":
-            return (d-y)*np.exp(-(d-y)**2/(2*self.correntropy_sigma**2))
+            ldiff = (d-y)*np.exp(-(d-y)**2/(2*self.correntropy_sigma**2))
+        else:
+            assert self.loss_function=="least_squares" or self.loss_function=="minimum_correntropy"
+        return ldiff
+
+def _sigmoid(y,derivative_order):
+    exp_y = np.exp(-y)
+    if derivative_order==0:
+        sy =  1. / (1. + exp_y)
+    elif derivative_order==1:
+        sy = exp_y / ( (1. + 2*exp_y + exp_y*exp_y  ) )
+    else:
+        raise ("Dereivative order not defined")
+    
+    return sy
