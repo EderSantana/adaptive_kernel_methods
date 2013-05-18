@@ -205,8 +205,11 @@ class KernelLMS(BaseEstimator, TransformerMixin):
                 self.coeff_ = np.append(self.coeff_, self.learning_rate *
                                    self._loss_derivative(d,y))
             elif self.l_mode == "classify":
+                #self.coeff_ = np.append(self.coeff_, \
+                #              _sigmoid(y,1) * self.learning_rate * \
+                #              self._loss_derivative(d,_sigmoid(y,0)))
                 self.coeff_ = np.append(self.coeff_, \
-                              _sigmoid(y,1) * self.learning_rate * \
+                              self.learning_rate * \
                               self._loss_derivative(d,_sigmoid(y,0)))
             else:
                 assert self.l_mode=="regression" or self.l_mode=="classify"
@@ -223,9 +226,12 @@ class KernelLMS(BaseEstimator, TransformerMixin):
                     self.coeff_ = np.append(self.coeff_, self.learning_rate *
                                         self._loss_derivative(d,y))
                 elif self.l_mode == "classify":
+                    #self.coeff_ = np.append(self.coeff_, \
+                    #                    _sigmoid(y,1) * self.learning_rate * \
+                    #                    self._loss_derivative(d,_sigmoid(y,0)))
                     self.coeff_ = np.append(self.coeff_, \
-                                        _sigmoid(y,1) * self.learning_rate * \
-                                        self._loss_derivative(d,_sigmoid(y,0)))
+                              self.learning_rate * \
+                              self._loss_derivative(d,_sigmoid(y,0)))
                 else:
                     assert self.l_mode=="regression" or self.l_mode=="classify"
                
