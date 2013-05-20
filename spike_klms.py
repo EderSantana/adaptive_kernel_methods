@@ -115,7 +115,7 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         return slash.inner_prod(X, Y, spike_kernel=self.kernel,
                                 filter_params=True, **params)
 
-    def fit(self, X, d, **params):
+    def fit(self, X, d, err=None):
         """Fit the model from data in X.
             
             Parameters
@@ -131,23 +131,28 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
             Returns the instance itself.
             """
         
-        N = len(X)
-        self.centers_ = list([X[0]])
-        if self.growing_criterion != "dense":
-            self.XX = {"X_neg_exp":[], "X_pos_exp":[],\
-            "X_neg_cum_sum_exp":[], "X_pos_cum_sum_exp":[], "MCI11":[]}
-            self._appendXX(X[0])
+        Nend = len(X)
+        N1 = 0
+        # If initializing network
+        if self.coeff_.shape[0] == 0:
+            self.centers_ = list([X[0]])
+            if self.growing_criterion != "dense":
+                self.XX = {"X_neg_exp":[], "X_pos_exp":[],\
+                    "X_neg_cum_sum_exp":[], "X_pos_cum_sum_exp":[], "MCI11":[]}
+                self._appendXX(X[0])
         
-        self.centerIndex_ = []
-        self.coeff_ = np.array([])
-        new_coeff = self.learning_rate * self._loss_derivative(d[0],0)
-        self.coeff_ = np.append( self.coeff_, new_coeff );
-        self.X_online_ = np.zeros(N)
+            self.centerIndex_ = []
+            self.coeff_ = np.array([])
+            new_coeff = self.learning_rate * self._loss_derivative(d[0])
+            self.coeff_ = np.append( self.coeff_, new_coeff )
+            self.X_online_ = np.zeros(Nend)
+            N1 = 1
         
-        for k in range(1,N):
+        # For initialized networks
+        for k in xrange(N1,Nend):
             gram = self._get_kernel(self.centers_,X[k])
             self.X_online_[k] = np.dot(self.coeff_, gram)
-            self._appendCenter(X[k], d[k], self.X_online_[k],k)
+            self._trainNet(X[k], d[k], self.X_online_[k],k)
         
         return self
 
@@ -169,7 +174,7 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
     
         return Z_out
 
-    def fit_transform(self, X, d, **params):
+    def fit_transform(self, X, d, err=None):
         """Fit the model from data in X and transform X.
 
         Parameters
@@ -183,29 +188,29 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         X_transformed_: array-like, shape (n_samples)
        
         """
-        self.fit(X, d, **params)
+        self.fit(X, d, err)
 
         self.X_transformed_ = self.transform(X)
 
         return self.X_transformed_
  
-    def _appendCenter(self, newX, d, y, k):
+    def _trainNet(self, newX, err, k):
         """ Append centers to the network following growing_criterion
             
         Returns
         -------
             `self` with possibly larger centers_, coeff_ and centerIndex_
         """
-        if self.coeff_.shape == 0:
+        if self.coeff_.shape[0] == 0:
             self.centers_ = list([newX])
             self.coeff_ = np.append(self.coeff_, self.learning_rate *
-                                   self._loss_derivative(d,y))
+                                   self._loss_derivative(err))
             self.centerIndex_ = k
         else:
             if self.growing_criterion == "dense":
                 self.centers_.append(newX)                
                 self.coeff_ = np.append(self.coeff_, self.learning_rate *
-                                        self._loss_derivative(d, y))
+                                        self._loss_derivative(err))
                 self.centerIndex_ = [self.centerIndex_, k]
 
             elif self.growing_criterion == "novelty":
@@ -213,20 +218,20 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
                                              ksize=self.ksize, **self.XX)
  
                 if np.max(distanc)>self.growing_param[0] and \
-                np.abs(d-y)>self.growing_param[1]:
+                np.abs(err)>self.growing_param[1]:
                     self.centers_.append(newX)
                     self.coeff_ = np.append(self.coeff_, self.learning_rate *
-                                           self._loss_derivative(d, y))
+                                           self._loss_derivative(err))
                     self.centerIndex_.append(k)
                     self._appendXX(newX)
         return self
 
-    def _loss_derivative(self,d,y):
+    def _loss_derivative(self,err):
         """ Evaluate the derivative of loss_function on d, y """
         if self.loss_function == "least_squares":
-            return d-y
+            return err
         elif self.loss_function == "minimum_correntropy":
-            return (d-y)*np.exp(-(d-y)**2/(2*self.correntropy_sigma**2))
+            return (err)*np.exp(-(err)**2/(2*self.correntropy_sigma**2))
         else:
             raise Exception("Invalid loss function: %s" % self.loss_function)
             
