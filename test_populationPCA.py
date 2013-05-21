@@ -2,12 +2,12 @@ import pylab as pl
 import numpy as np
 from numpy.linalg import eig
 from numpy.random import rand, randn
-from slash import sMCI, sNCI, ppMCI
+from slash import sMCI, sNCI, ppMCI, ppNCI
 from sklearn.decomposition import KernelPCA
 from sklearn.preprocessing import KernelCenterer
 
 def rasterPlot(population):
-    pl.figure(22)
+    pl.figure()
     for i in range(len(population)):
         yax = i + np.ones_like(population[i])
         pl.plot(population[i], yax, '.k')
@@ -47,12 +47,12 @@ def compute_K_matrix(X, Y=None):
         Y = X
         for i in xrange(len(X)):
             for j in range(i):
-                K[i,j] = ppMCI([X[i]], Y[j], .002)
+                K[i,j] = ppNCI([X[i]], Y[j], .002, .01)
                 K[j,i] = np.conj(K[i,j])
     else:
         for i in xrange(len(X)):
             for j in range(len(Y)):
-                K[i,j] = ppMCI([X[i]], Y[j], .002)
+                K[i,j] = ppNCI([X[i]], Y[j], .002, .01)
 
     return K
 
@@ -70,6 +70,7 @@ if __name__ == '__main__':
         test[i+20]  = generate_spike_times(classes2)
 
     rasterPlot(train[0])
+    rasterPlot(train[30])
 
     K = compute_K_matrix(train)
 

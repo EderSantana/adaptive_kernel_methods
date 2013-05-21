@@ -152,7 +152,7 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         for k in xrange(N1,Nend):
             gram = self._get_kernel(self.centers_,X[k])
             self.X_online_[k] = np.dot(self.coeff_, gram)
-            self._trainNet(X[k], d[k], self.X_online_[k],k)
+            self._trainNet(X[k], d[k]-self.X_online_[k],k)
         
         return self
 
