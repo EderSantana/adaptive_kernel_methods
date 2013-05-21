@@ -2,11 +2,16 @@ import pylab as pl
 import numpy as np
 from numpy.linalg import eig
 from numpy.random import rand, randn
-from slash import sMCI
+from slash import sMCI, sNCI
 from sklearn.decomposition import KernelPCA
 from sklearn.preprocessing import KernelCenterer
 
-np.random.seed(22)
+def rasterPlot(population):
+    pl.figure(22)
+    for i in range(len(population)):
+        yax = i + np.ones_like(population[i])
+        pl.plot(population[i], yax, '.k')
+    pl.show()
 
 def generate_spike_classes(n_classes, n_templates):
     classes = [{} for i in range(n_classes)]
@@ -21,9 +26,10 @@ def generate_spike_classes(n_classes, n_templates):
     return classes
 
 def generate_spike_times(classes):
-    population = [{} for i in range(40)]
 
-    for k in xrange(40):
+    population = [{} for i in range(len(classes))]
+
+    for k in xrange(len(classes)):
         temp = classes[k] + .003*randn(10)
         temp = temp[classes[k]>0]
         temp.sort()
@@ -42,39 +48,50 @@ def compute_K_matrix(X, Y=None):
         for i in xrange(len(X)):
             for j in range(i):
                 K[i,j] = sMCI(X[i], Y[j], .002)
-                K[j,i] = K[i,j]
+                K[j,i] = np.conj(K[i,j])
     else:
         for i in xrange(len(X)):
             for j in range(len(Y)):
-                K[i,j] = sMCI(X[i], Y[j], ksize = .002)
+                K[i,j] = sMCI(X[i], Y[j], .002)
 
     return K
-#if __init__ == __main__:
 
-classes = generate_spike_classes(2 ,2)
-train = generate_spike_times(classes)
-test  = generate_spike_times(classes)
-K = compute_K_matrix(train)
-###############################
-kcenterer = KernelCenterer()  #
-kcenterer.fit(K)              # Center Kernel Matrix
-Kc = kcenterer.transform(K)   #
-###############################
-D, E = eig(Kc)
-proj = np.dot(Kc, E[:,0:2])
+if __name__ == '__main__':
 
-Kt = compute_K_matrix(train, test)
-Ktc = kcenterer.transform(Kt)
-proj2 = np.dot(Kt, E[:,0:2])
+    classes = generate_spike_classes(1 ,2)
+    train = generate_spike_times(classes)
+    test  = generate_spike_times(classes)
+    rasterPlot(train)
+    K = compute_K_matrix(train)
+    ###############################
+    #N = K.shape[0]
+    #H = np.eye(N) - np.tile(1./N, [N, N]);
+    #Kc = np.dot(np.dot(H, K), H)
+    kcenterer = KernelCenterer()  #
+    kcenterer.fit(K)              # Center Kernel Matrix
+    Kc = kcenterer.transform(K)   #
+    ###############################
+    D, E = eig(Kc)
+    proj = np.dot(Kc, E[:,0:2])
+    
+    ################################ Center test
+    Kt = compute_K_matrix(train, test)
+    #M = Kt.shape[0]
+    #A = np.tile(K.sum(axis=0), [M, 1]) / N
+    #B = np.tile(Kt.sum(axis=1),[N, 1]) /N
+    #Kc2 = Kt - A - B + K.sum()/ N**2;
+    Kc2 = kcenterer.transform(Kt)
+    proj2 = np.dot(Kc2, E[:,0:2])
 
-kpca = KernelPCA(kernel="precomputed", n_components=2)
-kpca.fit(Kc)
-X = kpca.transform(Kc)
+    #kpca = KernelPCA(kernel="precomputed", n_components=2)
+    #kpca.fit(Kc)
+    #X = kpca.transform(Kc)
 
-###############################
-# Plot results
-###############################
-red = range(20)
-blu = range(21,40)
-pl.plot(proj2[red,0], proj2[red,1], '.r', proj2[blu,0], proj2[blu,1], '.b')
-pl.show()
+    ###############################
+    # Plot results
+    ###############################
+    red = range(len(classes)/2)
+    blu = range(len(classes)/2 + 1, len(classes))
+    pl.figure()
+    pl.plot(proj2[red,0], proj2[red,1], '.r', proj2[blu,0], proj2[blu,1], '.b')
+    pl.show()

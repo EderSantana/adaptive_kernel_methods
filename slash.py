@@ -104,7 +104,7 @@ def sMCI(x, y, ksize, y_neg_cum_sum_exp=None, y_pos_cum_sum_exp=None):
 
         yidx = -1
         for xidx in xrange(x.shape[0]):
-            while y[min(yidx+1,y.shape[0]-1)] <= x[xidx] and yidx<y.shape[0]-1:
+            while y[ min(yidx+1,y.shape[0]-1) ] <= x[xidx] and yidx<y.shape[0]-1:
                 yidx += 1
 
             if yidx == -1:
@@ -654,10 +654,15 @@ TESTS
 ====================
 """
 def test_sMCI():
-    x = np.array([0.0010, 0.0020, 0.0200,  0.0300, 0.3000,])
-    y = np.array([0.0040, 0.0050, 0.0200, 0.4000, 0.5000, 0.6000])
-    v = sMCI(x, y, .01)
-    print "Test_sMCI v = %10.5e" % v
+    #x = np.array([0.0010, 0.0020, 0.0200,  0.0300, 0.3000,])
+    #y = np.array([0.0040, 0.0050, 0.0200, 0.4000, 0.5000, 0.6000])
+    x = np.array([ 0.05684891,  0.12183341,  0.21504637,  0.03783751,  0.09107526, 0.07008217,  0.05355698,  0.20495672])
+    x.sort()
+    y = np.array([0.0502541 ,  0.1180693 ,  0.10801783,  0.21467571,  0.04431462, 0.08787606,  0.06541311,  0.17787088])
+    y.sort()
+    v = sMCI(x, y, .001)
+    print "Test_sMCI    v = %10.5e" % v
+    print "Right answer v = %f" % 0.803689147953212
     return
 
 def test_sMCIdistance():
