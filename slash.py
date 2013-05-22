@@ -30,6 +30,8 @@ SLASH - Level I
 ====================
 """
 
+# TODO: define a function to calculate x_stuffs and mci to reduce code repetition.
+
 def check_population(X):
     if not(isinstance(X, list)):
         X = list([X])
@@ -117,8 +119,8 @@ def sMCI(x, y, ksize, y_neg_cum_sum_exp=None, y_pos_cum_sum_exp=None):
 
     return v
 
-def sMCIdistance(x, y, ksize, x_neg_exp=None, x_pos_exp=None, \
-                 x_neg_cum_sum_exp=None, x_pos_cum_sum_exp=None, mci11=None):
+def sMCIdistance(x, y, ksize, x_neg_exp=[], x_pos_exp=[], \
+                 x_neg_cum_sum_exp=[], x_pos_cum_sum_exp=[], mci11=[]):
     """
     Squared Memoryless cross intensity (mCI) based distance
     Input:
@@ -136,12 +138,18 @@ def sMCIdistance(x, y, ksize, x_neg_exp=None, x_pos_exp=None, \
 
     assert (ksize>0. and np.isreal(ksize)), "Kernel size must be non-negative real"        
 
+    """
     if (x_neg_cum_sum_exp is None) or (x_pos_cum_sum_exp is None) or \
     (x_neg_cum_sum_exp == []) or (x_pos_cum_sum_exp == []):
         x, y = check_n_spikes(x,y) # we are assuming sorted spike trins
 
+    """
     # first, verify if inputs are equal
-    if x is y:
+    _chk = (x==y)
+    if isinstance(_chk, np.ndarray):
+        if all(_chk):
+            return d
+    elif _chk:
         return d
 
     # The second special case is a empty vector (silent neuron)
@@ -169,8 +177,8 @@ def sMCIdistance(x, y, ksize, x_neg_exp=None, x_pos_exp=None, \
         mci12 = pairwise_l1(x, y) / ksize
         mci12 = np.sum( np.exp(-mci12) )
         mci22 = pairwise_l1(y, y) / ksize
+        mci22 = np.sum( np.exp(-mci22) )
         if (mci11 is None) or (mci11 == []):
-            mci11 = np.sum( np.exp(-mci22) )
             mci11 = sMCI(x, x, ksize)
             
     else:
@@ -318,7 +326,8 @@ def pMCIdistance(X, y, ksize, X_neg_exp=None, X_pos_exp=None, \
     X = check_population(X)
     y = check_spike_train(y)    
     
-    V = np.zeros(len(X));
+    #V = [list() for i in range(len(X))]
+    V = np.zeros(len(X))
     
     # This avoids repetitive computations at the mci based distance step
     # This current implementations allows full or no knowledge about X    
@@ -359,12 +368,14 @@ def pMCIdistance(X, y, ksize, X_neg_exp=None, X_pos_exp=None, \
         
     for idx in xrange(len(X)):
         
-        V[idx] = sMCIdistance(X[idx], y, ksize, x_neg_exp=X_neg_exp[idx], \
-                              x_pos_exp=X_pos_exp[idx], \
-                              x_neg_cum_sum_exp=X_neg_cum_sum_exp[idx], \
-                              x_pos_cum_sum_exp=X_pos_cum_sum_exp[idx], \
-                              mci11=MCI11[idx])
-    return V
+        V[idx] = sMCIdistance(X[idx], y, ksize, x_neg_exp=np.squeeze(X_neg_exp[idx]), \
+                              x_pos_exp=np.squeeze(X_pos_exp[idx]), \
+                              x_neg_cum_sum_exp=np.squeeze(X_neg_cum_sum_exp[idx]), \
+                              x_pos_cum_sum_exp=np.squeeze(X_pos_cum_sum_exp[idx]), \
+                              mci11=np.squeeze(MCI11[idx]))
+        
+        #V[idx] = V[idx] + sMCIdistance(X[idx], y, ksize)
+    return np.array(V)
     
 def pNCI(X, y, ksize, gamma, X_neg_exp=None, X_pos_exp=None, \
                  X_neg_cum_sum_exp=None, X_pos_cum_sum_exp=None, MCI11=None):
@@ -438,7 +449,7 @@ def ppMCIdistance(Xx,Y, ksize, Xx_neg_exp=[], Xx_pos_exp=[]):
         Xx_neg_exp = list([list() for i in range(len(Xx))])
         Xx_pos_cum_sum_exp = list([list() for i in range(len(Xx))])
         Xx_neg_cum_sum_exp = list([list() for i in range(len(Xx))])
-        MCI11 = [{} for i in range(len(Xx))]
+        MCI11 = [list() for i in range(len(Xx))]
         for i in xrange(len(Xx)):
             for k in xrange(len(Xx[i])):
                 
@@ -448,6 +459,8 @@ def ppMCIdistance(Xx,Y, ksize, Xx_neg_exp=[], Xx_pos_exp=[]):
                 Xx_neg_cum_sum_exp[i].append( np.flipud(Xx_neg_exp[i][k]) )
                 Xx_neg_cum_sum_exp[i][k] = np.cumsum(Xx_neg_cum_sum_exp[i][k])
                 Xx_neg_cum_sum_exp[i][k] = np.flipud(Xx_neg_cum_sum_exp[i][k])
+                
+                MCI11[i].append( _mci(Xx[i][k], Xx_neg_exp[i][k], Xx_pos_exp[i][k], Xx_neg_cum_sum_exp[i][k], Xx_pos_cum_sum_exp[i][k]  ))
                 """
                 
                 Xx_pos_exp[i][k] = np.exp(Xx[i][k] / ksize)
@@ -479,7 +492,7 @@ def ppMCIdistance(Xx,Y, ksize, Xx_neg_exp=[], Xx_pos_exp=[]):
         for sidx in xrange(len(Xx[pidx])):
             V[pidx] = V[pidx] + sMCIdistance(Xx[pidx][sidx], Y[sidx], ksize, \
             x_neg_cum_sum_exp=Xx_neg_cum_sum_exp[pidx][sidx], \
-            x_pos_cum_sum_exp=Xx_pos_cum_sum_exp[pidx][sidx])
+            x_pos_cum_sum_exp=Xx_pos_cum_sum_exp[pidx][sidx], mci11=MCI11[pidx][sidx])
     
     return V
 
@@ -642,18 +655,17 @@ def _parallel_inner_prod(X, Y, func, n_jobs, **kwds):
     return np.hstack(ret)
     
 def _mci(x, x_neg_exp, x_pos_exp, x_neg_cum_sum_exp, x_pos_cum_sum_exp):
-        mci = 0
+        mci = 0.
         for k in xrange(x.shape[0]):
             if k == 1:
                 mci = mci + x_pos_exp[0] * \
-                    xX_neg_cum_sum_exp[0]
-            elif k == newX.shape[0]-1:
-                mci = mci + x_neg_exp[-1] * \
-                x_pos_cum_sum_exp[-1]
+                x_neg_cum_sum_exp[0]
+            elif k == (x).shape[0]-1:
+                mci = mci + x_neg_exp[-1] * x_pos_cum_sum_exp[-1]
             else:
-                mci = mci + self.XX["X_pos_cum_sum_exp"][-1][k] * \
-                self.XX["X_neg_exp"][-1][k] + self.XX["X_pos_exp"][-1][k] * \
-                self.XX["X_neg_cum_sum_exp"][-1][(k+1)]
+                mci = mci + x_pos_cum_sum_exp[k] * \
+                x_neg_exp[k] + x_pos_exp[k] * x_neg_cum_sum_exp[k+1]
+    
         return mci
 
 """
@@ -670,12 +682,17 @@ def test_sMCI():
     y.sort()
     v = sMCI(x, y, .001)
     print "Test_sMCI    v = %10.5e" % v
-    print "Right answer v = %f" % 0.803689147953212
+    print "Right answer v = %e" % 0.803689147953212
     return
 
 def test_sMCIdistance():
-    x = np.array([0.0010, 0.0020, 0.0200,  0.0300, 0.3000,])
-    y = np.array([0.0040, 0.0050, 0.0200, 0.4000, 0.5000, 0.6000])
+    x = np.array([ 0.05684891,  0.12183341,  0.21504637,  0.03783751,  0.09107526, 0.07008217,  0.05355698,  0.20495672])
+    x.sort()
+    y = np.array([0.0502541 ,  0.1180693 ,  0.10801783,  0.21467571,  0.04431462, 0.08787606,  0.06541311,  0.17787088])
+    y.sort()
+    
+    x = np.array([ 0.01505,  0.02274,  0.03102,  0.03963,  0.04812])
+    y = np.array([ 0.00756,  0.01715,  0.02756,  0.03913])
     v = sMCIdistance(x, y, .01)
     print "Test_sMCIdistance v = %10.5e" % v
     return
@@ -719,7 +736,7 @@ def test_InnerProd():
     params = {"gamma": .01,
               "ksize": .01}
     
-    V = inner_prod(X, y, spike_kernel="nci", n_jobs=1, filter_params=True \
+    V = inner_prod(X, y, spike_kernel="nci", n_jobs=1, filter_params=True, \
                   **params)
     print "Test_InnerProd V = [%10.5e, %10.5e]" % (V[0], V[1])
     return
