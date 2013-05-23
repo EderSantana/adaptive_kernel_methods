@@ -20,6 +20,6 @@ for i in xrange(len(X)):
 
 d   = squeeze(loadmat("targets.mat").get("targets"))
 t   = linspace(1,500,500)
-sklms = SpikeKLMS(kernel="nci", gamma=.05, learning_rate=.01, ksize=.005, growing_criterion="novelty",\
+sklms = SpikeKLMS(kernel="mci", gamma=.05, learning_rate=.01, ksize=.005, growing_criterion="novelty",\
 growing_param = [.1, .01])
 sklms.fit_transform(X, d)

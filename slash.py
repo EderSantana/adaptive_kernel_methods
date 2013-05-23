@@ -18,6 +18,7 @@ Author: Eder Santana <twitter/@edersantana>
 License: BSD style
 """
 import numpy as np
+import sklearn as sk
 from sklearn.externals.joblib import Parallel
 from sklearn.externals.joblib import delayed
 from sklearn.externals.joblib.parallel import cpu_count
@@ -407,11 +408,13 @@ def pNCI(X, y, ksize, gamma, X_neg_exp=None, X_pos_exp=None, \
 SLASH - Level III
 ====================
 """
-# At this level populations of spike trains should be input in lists, even if 
-# there is only one population
+# At this level populations of spike trains should be input in lists
 
 def ppMCI(Xx,Y, ksize, Xx_neg_exp=None, Xx_pos_exp=None):
             
+    if isinstance(Xx[0], np.ndarray): #Basic exception treatment, I didn't though if it will always work
+        Xx = [Xx]
+    
     if (Xx_pos_exp is None) or (Xx_pos_exp == []):
         Xx_pos_exp = [{} for i in range(len(Xx))]
         Xx_neg_exp = [{} for i in range(len(Xx))]
@@ -444,6 +447,8 @@ def ppMCI(Xx,Y, ksize, Xx_neg_exp=None, Xx_pos_exp=None):
 
 def ppMCIdistance(Xx,Y, ksize, Xx_neg_exp=[], Xx_pos_exp=[]):
     
+    if isinstance(Xx[0], np.ndarray):
+        Xx = [Xx]
     if (Xx_pos_exp is None) or (Xx_pos_exp == []):
         Xx_pos_exp = list([list() for i in range(len(Xx))])
         Xx_neg_exp = list([list() for i in range(len(Xx))])
@@ -500,8 +505,104 @@ def ppNCI(Xx, Y, ksize, gamma, Xx_neg_exp=[], Xx_pos_exp=[]):
     V = ppMCIdistance(Xx, Y, ksize, Xx_neg_exp=Xx_neg_exp, Xx_pos_exp=Xx_pos_exp)
     V = np.exp(-gamma*V)
     return V
+
+"""
+====================
+SLASH - EIG I
+====================
+"""
+
+def eigMCI(X, Y, ksize=.001, eig_idx=0, n_jobs=1, center_option="individual"):
+    """
+    First eigMCI calculates the kernel matrices Kx and Ky of populations of spiking neurons X and Y, induced the 'mci' spike kernel.
+    Then, eigMCI calculates the inner product between Xx and Yy as the inner product between the leading eigenvectors of Kx and Ky.
+        
+    Parameters:
+    -----------
     
+    center_option: "individual" | "common" | "none"
+        default: "individual"
+        The centering applied to each kernel matrix Kx and Ky. "individual" consider the bias at each space. "common" consider the bias induced by Xx and subtracts it from Kx and Ky. "none" no centering is applied over Kx and Ky.
     
+    eig_idx: int
+        default: 1
+        Index of the eigeventor used as representer of the whole population. The leading eigenvector is used as default. If the more than one eigenvetor is listed, the result will be trace of the inner product matrix between eigenvectors.
+
+    """
+    params = {"ksize": ksize}
+    Kx = compute_spike_kernel_matriz(X, X, spike_kernel="mci", n_jobs=n_jobs, **params)
+    Ky = compute_spike_kernel_matriz(Y, Y, spike_kernel="mci", n_jobs=n_jobs, **params)
+    if center_option == "individual":
+        kcenterer_x = sk.preprocessing.KernelCenterer()
+        kcenterer_y = sk.preprocessing.KernelCenterer()
+        kcenterer_x.fit(Kx)
+        kcenterer_y.fit(Ky)
+        Kxc = kcenterer_x.transform(Kx)
+        Kyc = kcenterer_y.transform(Ky)
+    
+    elif center_option == "common":
+        kcenterer_x = sk.preprocessing.KernelCenterer()
+        kcenterer_x.fit(Kx)
+        Kxc = kcenterer_x.transform(Kx)
+        Kyc = kcenterer_x.transform(Ky)
+
+    elif center_option == "none":
+        Kxc = Kx
+        Kyc = Ky
+
+    Dx, Ex = np.linalg.eig(Kxc)
+    Dy, Ey = np.linalg.eig(Kyc)
+
+    v = np.dot( Ex[:,eig_idx].T, Ey[:,eig_idx] )
+    if v.shape != ():
+        v = np.trace(v)
+
+    return v
+
+"""
+====================
+SLASH - EIG II
+====================
+"""
+
+def peigMCI(Xx, Yy, ksize=.001, eig_idx=0, n_jobs=1):
+    """
+    This is a more efficient method to calculate the spike kernel matriz induced by eigMCI. In the present method, the matrices and eigenvectors are calculated before hand. This avoids the repeated eigendecompositions.
+        
+    """
+    # TODO: acept eigendecomposition of Xx as input
+    params = {"ksize": ksize}
+    
+    if isinstance( Xx[0], np.ndarray):
+        Xx = [Xx]
+    if isinstance( Yy[0], np.ndarray):
+        Yy = [Yy]
+
+    KXxc = [list() for i in xrange( len(Xx) )]
+    EXx = np.zeros([len(Xx[0]), len(Xx) * len(eig_idx)])
+    for i in xrange( len(Xx) ):
+        KXx = compute_spike_kernel_matriz(Xx[i], Xx[i], spike_kernel="mci", \
+                                             n_jobs=n_jobs, **params)
+        kcenterer_x = sk.preprocessing.KernelCenterer()
+        kcenterer_x.fit(KXx)
+        KXxc[i] = kcenterer_x.transform(KXx)
+        D, E = np.linalg.eig(KXxc[i])
+        EXx[:,(i*len(eig_idx)):((i+1)*len(eig_idx))] = E[:, eig_idx]
+
+    KYyc = [list() for i in xrange( len(Yy) )]
+    EYy = np.zeros([len(Yy[0]), len(Yy) * len(eig_idx)])
+    for i in xrange( len(Xx) ):
+        KYy = compute_spike_kernel_matriz(Yy[i], Yy[i], spike_kernel="mci", \
+                                             n_jobs=n_jobs, **params)
+        kcenterer_y = sk.preprocessing.KernelCenterer()
+        kcenterer_y.fit(KYy)
+        KYyc[i] = kcenterer_x.transform(KYy)
+        D, E = np.linalg.eig(KYyc[i])
+        EYy[:,(i*len(eig_idx)):((i+1)*len(eig_idx))] = E[:, eig_idx]
+
+    V = np.dot(EXx.T, EYy)
+    return V
+
 """
 ==========================
 SLASH - Inner product call
@@ -514,7 +615,13 @@ SPIKE_KERNEL_FUNCTIONS = {
     # and also in pairwise_distances()!
     'mci': pMCI,
     'nci': pNCI,
-    'mcidistance': pMCIdistance
+    'mcidistance': pMCIdistance,
+    'pop_mci': ppMCI,
+    'pop_nci': ppNCI,
+    #'pop_mcidistance': ppMCIdistance,
+    #'eig_mci': eigMCI,
+    #'eig_nci': eigNCI,
+    #'eig_mcidistance': eigMCIdistance,
     }
 
 def spike_kernels():
@@ -537,7 +644,12 @@ def spike_kernels():
 KERNEL_PARAMS = {
     "mci": frozenset(["ksize"]),
     "nci": frozenset(["ksize", "gamma"]),
-    "mcidistance": frozenset(["ksize"])
+    "mcidistance": frozenset(["ksize"]),
+    "pop_mci": frozenset(["ksize"]),
+    "pop_nci": frozenset(["ksize", "gamma"]),
+    "pop_mcidistance": frozenset(["ksize"]),
+    "eig_mci": frozenset(["ksize"]),
+    "eig_nci": frozenset(["ksize", "gamma"]),
 }
 
 def inner_prod(X, Y=None, spike_kernel="mci", filter_params=False, n_jobs=1, \
@@ -653,6 +765,14 @@ def _parallel_inner_prod(X, Y, func, n_jobs, **kwds):
         for s in gen_even_slices(len(X), n_jobs))
 
     return np.hstack(ret)
+
+def compute_spike_kernel_matriz(X, Y, spike_kernel="mci", filter_params=True, \
+                                n_jobs=1, **kwds):
+    K = np.zeros([len(X), len(Y)])
+    for i in xrange(len(Y)):
+        V = inner_prod(X, Y[i], spike_kernel, filter_params, n_jobs, **kwds)
+        K[:,i] = V
+    return K
     
 def _mci(x, x_neg_exp, x_pos_exp, x_neg_cum_sum_exp, x_pos_cum_sum_exp):
         mci = 0.
