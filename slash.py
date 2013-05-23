@@ -565,41 +565,76 @@ SLASH - EIG II
 ====================
 """
 
-def peigMCI(Xx, Yy, ksize=.001, eig_idx=0, n_jobs=1):
+def _eigdecompose_population(Xx, eig_idx, n_jobs, spike_kernel, **params):
+    KXxc = [list() for i in xrange( len(Xx) )]
+    dim        = len(Xx[0])
+    n_eigs     = len(eig_idx)
+    n_vecotors = len(Xx) * n_eigs
+    EXx = np.zeros([dim, n_vecotors])
+    for i in xrange( dim ):
+        KXx = compute_spike_kernel_matriz(Xx[i], Xx[i], spike_kernel, \
+                                          n_jobs=n_jobs, **params)
+        kcenterer_x = sk.preprocessing.KernelCenterer()
+        kcenterer_x.fit(KXx)
+        KXxc[i] = kcenterer_x.transform(KXx)
+        D, E = np.linalg.eig(KXxc[i])
+        EXx[:,(i*n_eigs):((i+1)*n_eigs)] = E[:, eig_idx]
+
+    return EXx, KXxc
+
+def peigMCI(Xx, Yy=None, ksize=.001, eig_idx=[0], n_jobs=1):
     """
     This is a more efficient method to calculate the spike kernel matriz induced by eigMCI. In the present method, the matrices and eigenvectors are calculated before hand. This avoids the repeated eigendecompositions.
         
     """
     # TODO: acept eigendecomposition of Xx as input
     params = {"ksize": ksize}
-    
+    if Yy is None:
+        Yy = Xx
     if isinstance( Xx[0], np.ndarray):
         Xx = [Xx]
     if isinstance( Yy[0], np.ndarray):
         Yy = [Yy]
 
-    KXxc = [list() for i in xrange( len(Xx) )]
-    EXx = np.zeros([len(Xx[0]), len(Xx) * len(eig_idx)])
-    for i in xrange( len(Xx) ):
-        KXx = compute_spike_kernel_matriz(Xx[i], Xx[i], spike_kernel="mci", \
-                                             n_jobs=n_jobs, **params)
-        kcenterer_x = sk.preprocessing.KernelCenterer()
-        kcenterer_x.fit(KXx)
-        KXxc[i] = kcenterer_x.transform(KXx)
-        D, E = np.linalg.eig(KXxc[i])
-        EXx[:,(i*len(eig_idx)):((i+1)*len(eig_idx))] = E[:, eig_idx]
+    # Calculate X matrix
+    EXx , KXxc = _eigdecompose_population(Xx, eig_idx, n_jobs=n_jobs, \
+                                          spike_kernel="mci", **params)
+    # Calculate Y matrix
+    if Yy is Xx:
+        EYy = EXx
+        KYyc = KXxc
+    else:
+        EYy , KYyc = _eigdecompose_population(Yy, eig_idx, n_jobs=n_jobs, \
+                                              spike_kernel="mci", **params)
+    # Inner product
+    V = np.dot(EXx.T, EYy)
+    return V
 
-    KYyc = [list() for i in xrange( len(Yy) )]
-    EYy = np.zeros([len(Yy[0]), len(Yy) * len(eig_idx)])
-    for i in xrange( len(Xx) ):
-        KYy = compute_spike_kernel_matriz(Yy[i], Yy[i], spike_kernel="mci", \
-                                             n_jobs=n_jobs, **params)
-        kcenterer_y = sk.preprocessing.KernelCenterer()
-        kcenterer_y.fit(KYy)
-        KYyc[i] = kcenterer_x.transform(KYy)
-        D, E = np.linalg.eig(KYyc[i])
-        EYy[:,(i*len(eig_idx)):((i+1)*len(eig_idx))] = E[:, eig_idx]
-
+def peigNCI(Xx, Yy=None, ksize=.001, gamma=1, eig_idx=[0], n_jobs=1):
+    """
+        This is a more efficient method to calculate the spike kernel matriz induced by eigNCI. In the present method, the matrices and eigenvectors are calculated before hand. This avoids the repeated eigendecompositions.
+        
+        """
+    # TODO: acept eigendecomposition of Xx as input
+    params = {"ksize": ksize, "gamma": gamma}
+    if Yy is None:
+        Yy = Xx
+    if isinstance( Xx[0], np.ndarray):
+        Xx = [Xx]
+    if isinstance( Yy[0], np.ndarray):
+        Yy = [Yy]
+    
+    # Calculate X matrix
+    EXx , KXxc = _eigdecompose_population(Xx, eig_idx, n_jobs=n_jobs, \
+                                          spike_kernel="nci", **params)
+    # Calculate Y matrix
+    if Yy is Xx:
+        EYy = EXx
+        KYyc = KXxc
+    else:
+        EYy , KYyc = _eigdecompose_population(Yy, eig_idx, n_jobs=n_jobs, \
+                                              spike_kernel="nci", **params)
+    # Inner product
     V = np.dot(EXx.T, EYy)
     return V
 

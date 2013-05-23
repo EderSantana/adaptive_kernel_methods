@@ -1,3 +1,4 @@
+import slash
 import pylab as pl
 import numpy as np
 from numpy.linalg import eig
@@ -31,7 +32,7 @@ def generate_spike_times(classes):
 
     for k in xrange(len(classes)):
         temp = classes[k] + .003*randn(10)
-        temp = temp[classes[k]>0]
+        temp = temp[temp>0]
         temp.sort()
         population[k] = temp
             
@@ -72,8 +73,8 @@ if __name__ == '__main__':
     rasterPlot(train[0])
     rasterPlot(train[30])
 
-    K = compute_K_matrix(train)
-
+    #K = compute_K_matrix(train)
+    K = slash.peigNCI(train)
     ###############################
     #N = K.shape[0]
     #H = np.eye(N) - np.tile(1./N, [N, N]);
@@ -86,7 +87,8 @@ if __name__ == '__main__':
     proj = np.dot(Kc, E[:,0:2])
     
     ################################ Center test
-    Kt = compute_K_matrix(train, test)
+    #Kt = compute_K_matrix(train, test)
+    Kt = slash.peigNCI(train, test)
     #M = Kt.shape[0]
     #A = np.tile(K.sum(axis=0), [M, 1]) / N
     #B = np.tile(Kt.sum(axis=1),[N, 1]) /N
