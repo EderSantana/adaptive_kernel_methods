@@ -589,6 +589,8 @@ def peigMCI(Xx, Yy=None, ksize=.001, eig_idx=[0], n_jobs=1):
     """
     # TODO: acept eigendecomposition of Xx as input
     params = {"ksize": ksize}
+    if isinstance(eig_idx, int):
+        eig_idx = [eig_idx]
     if Yy is None:
         Yy = Xx
     if isinstance( Xx[0], np.ndarray):
@@ -610,6 +612,36 @@ def peigMCI(Xx, Yy=None, ksize=.001, eig_idx=[0], n_jobs=1):
     V = np.dot(EXx.T, EYy)
     return V
 
+def peigMCIdistance(Xx, Yy=None, ksize=.001, eig_idx=[0], n_jobs=1):
+    """
+        This is a more efficient method to calculate the spike kernel matriz induced by eigNCI. In the present method, the matrices and eigenvectors are calculated before hand. This avoids the repeated eigendecompositions.
+        
+        """
+    # TODO: acept eigendecomposition of Xx as input
+    params = {"ksize": ksize, "gamma": gamma}
+    if isinstance(eig_idx, int):
+        eig_idx = [eig_idx]
+    if Yy is None:
+        Yy = Xx
+    if isinstance( Xx[0], np.ndarray):
+        Xx = [Xx]
+    if isinstance( Yy[0], np.ndarray):
+        Yy = [Yy]
+    
+    # Calculate X matrix
+    EXx , KXxc = _eigdecompose_population(Xx, eig_idx, n_jobs=n_jobs, \
+                                          spike_kernel="mcidistance", **params)
+    # Calculate Y matrix
+    if Yy is Xx:
+        EYy = EXx
+        KYyc = KXxc
+    else:
+        EYy , KYyc = _eigdecompose_population(Yy, eig_idx, n_jobs=n_jobs, \
+                                              spike_kernel="mcidistance", **params)
+    # Inner product
+    V = np.dot(EXx.T, EYy)
+    return V
+
 def peigNCI(Xx, Yy=None, ksize=.001, gamma=1, eig_idx=[0], n_jobs=1):
     """
         This is a more efficient method to calculate the spike kernel matriz induced by eigNCI. In the present method, the matrices and eigenvectors are calculated before hand. This avoids the repeated eigendecompositions.
@@ -617,6 +649,8 @@ def peigNCI(Xx, Yy=None, ksize=.001, gamma=1, eig_idx=[0], n_jobs=1):
         """
     # TODO: acept eigendecomposition of Xx as input
     params = {"ksize": ksize, "gamma": gamma}
+    if isinstance(eig_idx, int):
+        eig_idx = [eig_idx]
     if Yy is None:
         Yy = Xx
     if isinstance( Xx[0], np.ndarray):
@@ -653,10 +687,10 @@ SPIKE_KERNEL_FUNCTIONS = {
     'mcidistance': pMCIdistance,
     'pop_mci': ppMCI,
     'pop_nci': ppNCI,
-    #'pop_mcidistance': ppMCIdistance,
-    #'eig_mci': eigMCI,
-    #'eig_nci': eigNCI,
-    #'eig_mcidistance': eigMCIdistance,
+    'pop_mcidistance': ppMCIdistance,
+    'eig_mci': peigMCI,
+    'eig_nci': peigNCI,
+    'eig_mcidistance': peigMCIdistance,
     }
 
 def spike_kernels():
@@ -670,9 +704,17 @@ def spike_kernels():
       ===============   ========================================
       metric            Function
       ===============   ========================================
-      'mci'             slash.MCI
-      'nci'             slash.NCI
+      'mci'             slash.pMCI
+      'nci'             slash.pNCI
+      'mcidistance'     slash.pMCIdistance
+      'pop_mci'         slash.ppMCI
+      'pop_nci'         slash.ppNCI
+      'pop_mcidistance' slash.ppMCIdistance
+      'eig_mci'         slash.peigMCI
+      'eig_nci'         slash.peigNCI
+      'eig_mcidistance' slash.peigMCIdistance
       ===============   ========================================
+        
     """
     return SPIKE_KERNEL_FUNCTIONS
     
@@ -684,6 +726,7 @@ KERNEL_PARAMS = {
     "pop_nci": frozenset(["ksize", "gamma"]),
     "pop_mcidistance": frozenset(["ksize"]),
     "eig_mci": frozenset(["ksize"]),
+    "eig_mcidistance": frozenset(["ksize"]),
     "eig_nci": frozenset(["ksize", "gamma"]),
 }
 
