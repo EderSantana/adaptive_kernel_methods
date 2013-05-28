@@ -79,7 +79,9 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
     def __init__(self, kernel="mci", learning_rate=0.01, growing_criterion="dense", \
                  growing_param=None, loss_function="least_squares", \
                  loss_param=None, gamma=None, ksize=0.01, kernel_params=None, \
-                 correntropy_sigma=None):
+                 correntropy_sigma=None, n_jobs=1):
+        
+        self.n_jobs = n_jobs
         self.kernel = kernel
         self.kernel_params = kernel_params
         self.learning_rate = learning_rate
@@ -113,7 +115,7 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
             params = {"gamma": self.gamma,
                       "ksize": self.ksize}
         return slash.inner_prod(X, Y, spike_kernel=self.kernel,
-                                filter_params=True, **params)
+                                filter_params=True, n_jobs=self.n_jobs, **params)
 
     def fit(self, X, d, err=None):
         """Fit the model from data in X.
@@ -212,7 +214,7 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
                 self.centerIndex_ = [self.centerIndex_, k]
 
             elif self.growing_criterion == "novelty":
-                distanc = slash.pMCIdistance(self.centers_, newX, \
+                distanc = slash.ppMCIdistance(self.centers_, newX, \
                                              ksize=self.ksize)
  
                 if np.max(distanc)>self.growing_param[0] and \

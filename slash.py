@@ -19,11 +19,12 @@ License: BSD style
 """
 import numpy as np
 import sklearn as sk
+from sklearn.preprocessing import KernelCenterer
 from sklearn.externals.joblib import Parallel
 from sklearn.externals.joblib import delayed
 from sklearn.externals.joblib.parallel import cpu_count
 from sklearn.utils import gen_even_slices
-
+from copy import copy
 
 """
 ====================
@@ -35,7 +36,7 @@ SLASH - Level I
 
 def check_population(X):
     if not(isinstance(X, list)):
-        X = list([X])
+        X = copy([X])
     return X
 
 def check_spike_train(x):
@@ -336,12 +337,12 @@ def pMCIdistance(X, y, ksize, X_neg_exp=None, X_pos_exp=None, \
     if (X_neg_exp is None) or (X_pos_exp is None) or (X_neg_cum_sum_exp is None) or \
     (X_pos_cum_sum_exp is None) or (X_neg_exp == []) or (X_pos_exp == []) or \
     (X_neg_cum_sum_exp == []) or (X_pos_cum_sum_exp == []):
-        X_pos_exp = [{} for i in range(len(X))]
-        X_neg_exp = [{} for i in range(len(X))]
+        X_pos_exp         = [{} for i in range(len(X))]
+        X_neg_exp         = [{} for i in range(len(X))]
         X_neg_cum_sum_exp = [{} for i in range(len(X))]
         X_pos_cum_sum_exp = [{} for i in range(len(X))]
         for idx in xrange(len(X)):
-            X_pos_exp[idx] = np.exp(-X[idx] / ksize)
+            X_pos_exp[idx]         = np.exp(-X[idx] / ksize)
             X_pos_cum_sum_exp[idx] = np.cumsum(X_pos_exp[idx])
             
             X_neg_exp[idx] = np.exp(-X[idx] / ksize)
@@ -412,8 +413,8 @@ SLASH - Level III
 
 def ppMCI(Xx,Y, ksize, Xx_neg_exp=None, Xx_pos_exp=None):
             
-    if isinstance(Xx[0], np.ndarray): #Basic exception treatment, I didn't though if it will always work
-        Xx = [Xx]
+    #if isinstance(Xx[0], np.ndarray): #Basic exception treatment, I didn't though if it will always work
+    #    Xx = copy([Xx])
     
     if (Xx_pos_exp is None) or (Xx_pos_exp == []):
         Xx_pos_exp = [{} for i in range(len(Xx))]
@@ -797,6 +798,8 @@ def inner_prod(X, Y=None, spike_kernel="mci", filter_params=False, n_jobs=1, \
     If metric is 'precomputed', Y is ignored and X is returned.
 
     """
+    if Y is None:
+        Y = X
     if spike_kernel == "precomputed":
         return X
     elif spike_kernel in SPIKE_KERNEL_FUNCTIONS:
