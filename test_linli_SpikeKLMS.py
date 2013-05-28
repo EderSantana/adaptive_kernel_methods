@@ -11,7 +11,7 @@ from sklearn.preprocessing import scale
 pl.close('all')
 
 time_step = 2
-time_window = [-20, 80]
+time_window = [-80, 20]
 T = 2000
 simulation = np.load('linli2_output.npy')
 spike_events = simulation[:-1]
@@ -22,8 +22,11 @@ target = target[range(0,target.shape[0],time_step)]
 input = ts.nest_2_input(spike_events, T, time_window=time_window, \
         time_step=time_step)
 
-sklms = SpikeKLMS(kernel="pop_mci", growing_criterion='dense', growing_param=[2., 5.], \
-        ksize=5,learning_rate=.0005, n_jobs=4)
+#sklms = SpikeKLMS(kernel="pop_mci", growing_criterion='novelty', growing_param=[2., 10.], \
+        #ksize=5,learning_rate=.0005, n_jobs=4)
+sklms = SpikeKLMS(kernel="eig_mci", growing_criterion='dense', growing_param=[2., 10.], \
+        ksize=1,learning_rate=.0005, loss_function='least_squares', \
+        correntropy_sigma=1., n_jobs=1)
 print sklms
 
 sklms.fit_transform(copy(input), target[:len(input)])

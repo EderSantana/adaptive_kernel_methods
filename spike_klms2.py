@@ -92,10 +92,11 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
                 self.correntropy_sigma = correntropy_sigma
         self.growing_criterion = growing_criterion
         if self.growing_criterion != "dense":
-            self.XX = []        
+            self.mci11 = list()        
             self.growing_param = growing_param
         self.gamma = gamma
         self.ksize = ksize
+        self.eig11 = list()
         self.centers_ = np.array([])
         self.coeff_ = np.array([])
         self.centerIndex_ = []
@@ -113,7 +114,8 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
             params = self.kernel_params or {}
         else:
             params = {"gamma": self.gamma,
-                      "ksize": self.ksize}
+                      "ksize": self.ksize,
+                      "EXx"  : self.eig11}
         return slash.inner_prod(X, Y, spike_kernel=self.kernel,
                                 filter_params=True, n_jobs=self.n_jobs, **params)
 
@@ -137,14 +139,19 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         N1 = 0
         # If initializing network
         if self.coeff_.shape[0] == 0:
-            self.centers_ = list([X[0]])
-            #if self.growing_criterion != "dense":
-            self.centerIndex_ = []
-            self.coeff_ = np.array([])
-            new_coeff = self.learning_rate * self._loss_derivative(d[0])
-            self.coeff_ = np.append( self.coeff_, new_coeff )
-            self.X_online_ = np.zeros(Nend)
-            N1 = 1
+            self.centers_     = list([X[0]])
+            if self.growing_criterion != "dense":
+                self._appendMCI(X[0])
+            if self.kernel=='eig_mci' or self.kernel=='eig_nci':
+                self._appendEIG(X[0])
+                #self.eig11.append(slash._eigdecompose_population(X[0],\
+                #        spike_kernel=self.kernel[4:]))
+            self.centerIndex_ = list()
+            self.coeff_       = np.array([])
+            new_coeff         = self.learning_rate * self._loss_derivative(d[0])
+            self.coeff_       = np.append( self.coeff_, new_coeff )
+            self.X_online_    = np.zeros(Nend)
+            N1                = 1
         
         # For initialized networks
         for k in xrange(N1,Nend):
@@ -204,7 +211,7 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         if self.coeff_.shape[0] == 0:
             self.centers_ = list([newX])
             self.coeff_ = np.append(self.coeff_, self.learning_rate *
-                                   self._loss_derivative(err))
+                                    self._loss_derivative(err))
             self.centerIndex_ = k
         else:
             if self.growing_criterion == "dense":
@@ -212,10 +219,14 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
                 self.coeff_ = np.append(self.coeff_, self.learning_rate *
                                         self._loss_derivative(err))
                 self.centerIndex_ = [self.centerIndex_, k]
+                if self.kernel=='eig_mci' or self.kernel=='eig_nci':
+                    self._appendEIG(newX)
+                    #self.eig11.append(slash._eigdecompose_population(newX,\
+                                      #spike_kernel=self.kernel[4:]))
 
             elif self.growing_criterion == "novelty":
                 distanc = slash.ppMCIdistance(self.centers_, newX, \
-                                             ksize=self.ksize)
+                                             ksize=self.ksize, pMCI11=self.mci11)
  
                 if np.max(distanc)>self.growing_param[0] and \
                 np.abs(err)>self.growing_param[1]:
@@ -223,7 +234,11 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
                     self.coeff_ = np.append(self.coeff_, self.learning_rate *
                                            self._loss_derivative(err))
                     self.centerIndex_.append(k)
-                    #self._appendXX(newX)
+                    self._appendMCI(newX)
+                    if self.kernel=='eig_mci' or self.kernel=='eig_nci':
+                        self._appendEIG(newX)
+                        #self.eig11.append(slash._eigdecompose_population(newX,\
+                        #                  spike_kernel=self.kernel[4:]))
         return self
 
     def _loss_derivative(self,err):
@@ -235,12 +250,23 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         else:
             raise Exception("Invalid loss function: %s" % self.loss_function)
             
-    #def _appendXX(self, newX):
+    def _appendMCI(self, newX):
     #    """Save precalculated data about centers to avoid repetitive
     #       calculations at SLASH Level II
     #    """
+        newXx = slash.check_population(newX)
+        MCI11 = [list() for i in range(len(newXx))]
+        for i in xrange(len(newXx)):
+            MCI11[i] = slash.sMCI(newXx[i], newXx[i], self.ksize)
+        self.mci11.append(MCI11)
         return self
-
-    #def _mci(self, newX):
-    #mci = 0
-    #return mci
+    
+    def _appendEIG(self, newX):
+        eig_params = {'ksize': self.ksize, 'gamma': self.gamma, \
+                'spike_kernel':'pop_'+self.kernel[4:]}
+        EXx = slash._eigdecompose_population(newX, **eig_params)
+        if self.eig11 == []:
+            self.eig11 = EXx
+        else:
+            self.eig11 = np.hstack([self.eig11, EXx])
+        return self

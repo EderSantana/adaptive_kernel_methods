@@ -34,6 +34,8 @@ SLASH - Level I
 # TODO: define a function to calculate x_stuffs and mci to reduce code repetition.
 
 def check_list_population(Xx):
+    if isinstance(Xx, np.ndarray): # Check if single spike train
+        Xx = list([Xx])
     if isinstance(Xx[0], np.ndarray): #Basic exception treatment, I didn't though if it will always work
         Xx = list([Xx])
     return Xx
@@ -99,7 +101,7 @@ def sMCI(x, y, ksize):
     
     return v
 
-def sMCIdistance(x, y, ksize):
+def sMCIdistance(x, y, ksize, mci11=None, mci22=None):
     """
     Squared Memoryless cross intensity (mCI) based distance
     Input:
@@ -131,13 +133,16 @@ def sMCIdistance(x, y, ksize):
         d = sMCI(x, x, ksize)
     else:
         mci12 = sMCI(x, y, ksize)
-        mci11 = sMCI(x, x, ksize)
-        mci22 = sMCI(y, y, ksize)
+        if mci11 is None or mci11==[]:
+            mci11 = sMCI(x, x, ksize)
+        if mci22 is None or mci22 == []:
+            mci22 = sMCI(y, y, ksize)
+
         d = mci11 + mci22 - 2*mci12
 
     return d
 
-def sNCI(x, y, ksize, gamma):
+def sNCI(x, y, ksize, gamma, mci11=None, mci22=None):
     """
     nonlinear cross intensity kernel (nCI) - (aka. radial basis function for)
                                              (spike trains)
@@ -149,7 +154,7 @@ def sNCI(x, y, ksize, gamma):
       v: exp(-gamma*squared_MCI_distance)  
         
     """
-    v = sMCIdistance(x, y, ksize)
+    v = sMCIdistance(x, y, ksize, mci11=mci11, mci22=mci22)
     v *= -gamma
     v = np.exp(v)
     return v
@@ -161,7 +166,7 @@ SLASH - Level II
 """
 
 
-def pMCI(X, y, ksize):
+def pMCI(X, y, ksize, MCI11=None, mci22=None):
     """
     Memoryless Cross Intensity kernel (mCI)
         Input:
@@ -178,12 +183,12 @@ def pMCI(X, y, ksize):
     y = check_spike_train(y)
     
     V = np.zeros(len(X));
-    for idx in xrange(len(X)):
-        V[idx] = sMCI(X[idx], y, ksize)
+    for i in xrange(len(X)):
+        V[i] = sMCI(X[i], y, ksize)
 
     return V
 
-def pMCIdistance(X, y, ksize):
+def pMCIdistance(X, y, ksize, MCI11=None, mci22=None):
     """
     Memoryless Cross Intensity kernel (mCI) based squared distance 
     Input:
@@ -199,13 +204,18 @@ def pMCIdistance(X, y, ksize):
     X = check_population(X)
     y = check_spike_train(y)    
     
+    
+    if MCI11 is None:
+        MCI11 = [list() for i in range(len(X))]
+    if mci22 is None:
+        mci22 = sMCI(y, y, ksize)
     V = np.zeros(len(X))
     for idx in xrange(len(X)):
-        V[idx] = sMCIdistance(X[idx], y, ksize)
+        V[idx] = sMCIdistance(X[idx], y, ksize, mci11=MCI11[i], mci22=mci22)
     
     return V
     
-def pNCI(X, y, ksize, gamma):
+def pNCI(X, y, ksize, gamma, MCI11=None, mci22=None):
     """
     Nonlinear Cross Intensity kernel (mCI) based distance
     Input:
@@ -223,7 +233,7 @@ def pNCI(X, y, ksize, gamma):
     #y = check_spike_train(y)
     
     V = np.zeros(len(X))
-    V = pMCIdistance(X, y, ksize)
+    V = pMCIdistance(X, y, ksize, MCI11=MCI11, mci22=mci22)
     V *= -gamma
     V = np.exp(V)
     return V
@@ -237,26 +247,39 @@ SLASH - Level III
 
 def ppMCI(Xx,Y, ksize):
             
-    Xx = check_list_population(Xx)    
+    Xx = check_list_population(Xx)
+    Y  = check_population(Y)
     V = np.zeros(len(Xx))
     for i in xrange(len(Xx)):
-        for k in xrange(len(Xx[i])):
+        for k in xrange(len(Y)):
             V[i] = V[i] + sMCI(Xx[i][k], Y[k], ksize)
     
     return V
 
-def ppMCIdistance(Xx,Y, ksize):
+def ppMCIdistance(Xx,Y, ksize, pMCI11=None, MCI22=None):
     
     Xx = check_list_population(Xx)
+    Y  = check_population(Y)
+
+    if pMCI11 is None or pMCI11==[]:
+        pMCI11 = [list() for i in range(len(Xx))]
+        for i in xrange(len(Xx)):
+            pMCI11[i] = [list() for k in range(len(Xx[i]))]
+    if MCI22 is None or MCI22==[]:
+        MCI22 = [list() for i in range(len(Y))]
+        for k in xrange(len(Y)):
+            MCI22[k] = sMCI(Y[k], Y[k], ksize)
+
     V = np.zeros(len(Xx))
     for i in xrange(len(Xx)):
-        for k in xrange(len(Xx[i])):
-            V[i] = V[i] + sMCIdistance(Xx[i][k], Y[k], ksize)
+        for k in xrange(len(Y)):
+            V[i] = V[i] + sMCIdistance(Xx[i][k], Y[k], ksize, mci11=pMCI11[i][k], \
+                                       mci22=MCI22[k])
     
     return V
 
-def ppNCI(Xx, Y, ksize, gamma):
-    V = ppMCIdistance(Xx, Y, ksize)
+def ppNCI(Xx, Y, ksize, gamma, pMCI11=None, MCI22=None):
+    V = ppMCIdistance(Xx, Y, ksize, pMCI11=pMCI11, MCI22=MCI22)
     V = np.exp(-gamma*V)
     return V
 
@@ -319,14 +342,15 @@ SLASH - EIG II
 ====================
 """
 
-def _eigdecompose_population(Xx, eig_idx, n_jobs, spike_kernel, **params):
+def _eigdecompose_population(Xx, eig_idx=[0], spike_kernel='mci', n_jobs=1, **params):
+    Xx = check_list_population(Xx)
     KXxc = [list() for i in xrange( len(Xx) )]
     dim        = len(Xx[0])
     n_eigs     = len(eig_idx)
     n_vecotors = len(Xx) * n_eigs
-    EXx = np.zeros([dim, n_vecotors])
-    for i in xrange( dim ):
-        KXx = compute_spike_kernel_matriz(Xx[i], Xx[i], spike_kernel, \
+    EXx = np.zeros((dim, n_vecotors))
+    for i in xrange( len(Xx) ):
+        KXx = compute_spike_kernel_matriz(Xx[i], Xx[i], spike_kernel=spike_kernel, \
                                           n_jobs=n_jobs, **params)
         kcenterer_x = sk.preprocessing.KernelCenterer()
         kcenterer_x.fit(KXx)
@@ -334,44 +358,77 @@ def _eigdecompose_population(Xx, eig_idx, n_jobs, spike_kernel, **params):
         D, E = np.linalg.eig(KXxc[i])
         EXx[:,(i*n_eigs):((i+1)*n_eigs)] = E[:, eig_idx]
 
-    return EXx, KXxc
+    return EXx
 
-def peigMCI(Xx, Yy=None, ksize=.001, eig_idx=[0], n_jobs=1):
+def peigMCI(Xx, Yy=None, ksize=.001, eig_idx=[1], n_jobs=1, EXx=None):
     """
     This is a more efficient method to calculate the spike kernel matriz induced by eigMCI. In the present method, the matrices and eigenvectors are calculated before hand. This avoids the repeated eigendecompositions.
         
     """
-    # TODO: acept eigendecomposition of Xx as input
+    if Yy is None:
+        Yy = Xx
+    Xx = check_list_population(Xx)
+    Yy = check_list_population(Xx)
+
+    # TODO: accept eigendecomposition of Xx as input
     params = {"ksize": ksize}
     if isinstance(eig_idx, int):
         eig_idx = [eig_idx]
-    if Yy is None:
-        Yy = Xx
-    if isinstance( Xx[0], np.ndarray):
-        Xx = [Xx]
-    if isinstance( Yy[0], np.ndarray):
-        Yy = [Yy]
 
     # Calculate X matrix
-    EXx , KXxc = _eigdecompose_population(Xx, eig_idx, n_jobs=n_jobs, \
-                                          spike_kernel="mci", **params)
+    if EXx is None or EXx==[]:
+        EXx = _eigdecompose_population(Xx, eig_idx=eig_idx, spike_kernel="mci", \
+                                          n_jobs=n_jobs, **params)
+    else:
+        EXx = np.squeeze(EXx)
     # Calculate Y matrix
     if Yy is Xx:
         EYy = EXx
-        KYyc = KXxc
+        #KYyc = KXxc
     else:
-        EYy , KYyc = _eigdecompose_population(Yy, eig_idx, n_jobs=n_jobs, \
-                                              spike_kernel="mci", **params)
+        EYy = _eigdecompose_population(Yy, eig_idx, spike_kernel="mci", \
+                                              n_jobs=n_jobs, **params)
     # Inner product
+    #import pdb; pdb.set_trace()
     V = np.dot(EXx.T, EYy)
+    if V.shape:
+        V = np.diag(V)
     return V
 
-def peigMCIdistance(Xx, Yy=None, ksize=.001, eig_idx=[0], n_jobs=1):
+def peigMCIdistance(Xx, Yy=None, ksize=.001, eig_idx=[1], n_jobs=1, EXx=None):
     """
         This is a more efficient method to calculate the spike kernel matriz induced by eigNCI. In the present method, the matrices and eigenvectors are calculated before hand. This avoids the repeated eigendecompositions.
         
         """
-    # TODO: acept eigendecomposition of Xx as input
+    params = {"ksize": ksize, "gamma": gamma}
+    if isinstance(eig_idx, int):
+        eig_idx = [eig_idx]
+    if Yy is None:
+        Yy = Xx
+    Xx = check_list_population(Xx)
+    Yy = check_list_population(Yy)
+    # Calculate X matrix
+    if EXx is None or EXx==[]:
+        EXx = _eigdecompose_population(Xx, eig_idx, spike_kernel="mcidistance", \
+                                          n_jobs=n_jobs,**params)
+    # Calculate Y matrix
+    if Yy is Xx:
+        EYy = EXx
+        #KYyc = KXxc
+    else:
+        EYy = _eigdecompose_population(Yy,eig_idx,spike_kernel="mcidistance",\
+                                              n_jobs=n_jobs, **params)
+    # Inner product
+    V = np.dot(EXx.T, EYy)
+    if V.shape:
+        V = np.diag(V)
+    return V
+
+def peigNCI(Xx, Yy=None, ksize=.001, gamma=1, eig_idx=[0], n_jobs=1, EXx=None):
+    """
+        This is a more efficient method to calculate the spike kernel matriz induced by eigNCI. In the present method, the matrices and eigenvectors are calculated before hand. This avoids the repeated eigendecompositions.
+        
+        """
     params = {"ksize": ksize, "gamma": gamma}
     if isinstance(eig_idx, int):
         eig_idx = [eig_idx]
@@ -383,47 +440,20 @@ def peigMCIdistance(Xx, Yy=None, ksize=.001, eig_idx=[0], n_jobs=1):
         Yy = [Yy]
     
     # Calculate X matrix
-    EXx , KXxc = _eigdecompose_population(Xx, eig_idx, n_jobs=n_jobs, \
-                                          spike_kernel="mcidistance", **params)
+    if EXx is None or EXx==[]:
+        EXx = _eigdecompose_population(Xx, eig_idx, spike_kernel="nci",\
+                                          n_jobs=n_jobs, **params)
     # Calculate Y matrix
     if Yy is Xx:
         EYy = EXx
-        KYyc = KXxc
+        #KYyc = KXxc
     else:
-        EYy , KYyc = _eigdecompose_population(Yy, eig_idx, n_jobs=n_jobs, \
-                                              spike_kernel="mcidistance", **params)
+        EYy = _eigdecompose_population(Yy, eig_idx, spike_kernel="nci",\
+                                              n_jobs=n_jobs, **params)
     # Inner product
     V = np.dot(EXx.T, EYy)
-    return V
-
-def peigNCI(Xx, Yy=None, ksize=.001, gamma=1, eig_idx=[0], n_jobs=1):
-    """
-        This is a more efficient method to calculate the spike kernel matriz induced by eigNCI. In the present method, the matrices and eigenvectors are calculated before hand. This avoids the repeated eigendecompositions.
-        
-        """
-    # TODO: acept eigendecomposition of Xx as input
-    params = {"ksize": ksize, "gamma": gamma}
-    if isinstance(eig_idx, int):
-        eig_idx = [eig_idx]
-    if Yy is None:
-        Yy = Xx
-    if isinstance( Xx[0], np.ndarray):
-        Xx = [Xx]
-    if isinstance( Yy[0], np.ndarray):
-        Yy = [Yy]
-    
-    # Calculate X matrix
-    EXx , KXxc = _eigdecompose_population(Xx, eig_idx, n_jobs=n_jobs, \
-                                          spike_kernel="nci", **params)
-    # Calculate Y matrix
-    if Yy is Xx:
-        EYy = EXx
-        KYyc = KXxc
-    else:
-        EYy , KYyc = _eigdecompose_population(Yy, eig_idx, n_jobs=n_jobs, \
-                                              spike_kernel="nci", **params)
-    # Inner product
-    V = np.dot(EXx.T, EYy)
+    if V.shape:
+        V = np.diag(V)
     return V
 
 """
@@ -479,9 +509,9 @@ KERNEL_PARAMS = {
     "pop_mci": frozenset(["ksize"]),
     "pop_nci": frozenset(["ksize", "gamma"]),
     "pop_mcidistance": frozenset(["ksize"]),
-    "eig_mci": frozenset(["ksize"]),
-    "eig_mcidistance": frozenset(["ksize"]),
-    "eig_nci": frozenset(["ksize", "gamma"]),
+    "eig_mci": frozenset(["ksize", "EXx"]),
+    "eig_mcidistance": frozenset(["ksize", "EXx"]),
+    "eig_nci": frozenset(["ksize", "gamma", "EXx"]),
 }
 
 def inner_prod(X, Y=None, spike_kernel="mci", filter_params=False, n_jobs=1, \

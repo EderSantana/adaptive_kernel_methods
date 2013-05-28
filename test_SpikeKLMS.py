@@ -6,10 +6,10 @@ Created on Mon May 13 12:14:44 2013
 """
 from numpy import squeeze, newaxis, linspace
 
-import spike_klms
+import spike_klms2
 
-reload(spike_klms)
-from spike_klms import SpikeKLMS
+reload(spike_klms2)
+from spike_klms2 import SpikeKLMS
 from scipy.io import loadmat
 sts = loadmat("sts.mat").get("sts")
 X = range(len(sts))
