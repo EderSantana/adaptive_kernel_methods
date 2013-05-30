@@ -5,9 +5,11 @@ Created on Mon May 13 12:14:44 2013
 @author: eder
 """
 from numpy import squeeze, newaxis, linspace
+import pylab as pl
 
 import spike_klms2
 
+pl.close('all')
 reload(spike_klms2)
 from spike_klms2 import SpikeKLMS
 from scipy.io import loadmat
@@ -20,6 +22,9 @@ for i in xrange(len(X)):
 
 d   = squeeze(loadmat("targets.mat").get("targets"))
 t   = linspace(1,500,500)
-sklms = SpikeKLMS(kernel="mci", gamma=.05, learning_rate=.01, ksize=.005, growing_criterion="novelty",\
-growing_param = [.1, .01])
+sklms = SpikeKLMS(kernel="mci", gamma=.05, learning_rate=.001, ksize=.005, growing_criterion="novelty",\
+growing_param = [15, .01], dropout=.5)
 sklms.fit_transform(X, d)
+pl.plot(sklms.X_transformed_)
+pl.plot(d)
+pl.show()

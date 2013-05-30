@@ -11,25 +11,26 @@ from sklearn.preprocessing import scale
 pl.close('all')
 
 time_step = 2
-time_window = [-80, 20]
+time_window = [-80, 50]
 T = 2000
-simulation = np.load('linli2_output.npy')
+simulation = np.load('linli_generalization.npy')
 spike_events = simulation[:-1]
 spike_events[0] = np.floor(spike_events[0])
 target = simulation[-1]
 target = target[range(0,target.shape[0],time_step)]
 
-input = ts.nest_2_input(spike_events, T, time_window=time_window, \
+input = ts.nest_2_input(spike_events, 3*T, time_window=time_window, \
         time_step=time_step)
 
 #sklms = SpikeKLMS(kernel="pop_mci", growing_criterion='novelty', growing_param=[2., 10.], \
         #ksize=5,learning_rate=.0005, n_jobs=4)
-sklms = SpikeKLMS(kernel="eig_mci", growing_criterion='dense', growing_param=[2., 10.], \
+sklms = SpikeKLMS(kernel="pop_nci", growing_criterion='dense', growing_param=[2., 10.], \
         ksize=1,learning_rate=.0005, loss_function='least_squares', \
-        correntropy_sigma=1., n_jobs=1)
+        correntropy_sigma=1., n_jobs=4, gamma=.01)
 print sklms
 
-sklms.fit_transform(copy(input), target[:len(input)])
+sklms.fit(input[:T/2], target[:T/2])
+sklms.X_transformed_ = sklms.transform(input)
 G = gridspec.GridSpec(3,1)
 pl.figure()
 pl.subplot(G[:-1])

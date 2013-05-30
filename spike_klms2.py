@@ -6,6 +6,7 @@
 import numpy as np
 import slash2 as slash
 
+import numpy.random
 from sklearn.base import BaseEstimator, TransformerMixin
 #from sklearn.metrics.pairwise import pairwise_kernels, euclidean_distances
 
@@ -79,7 +80,7 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
     def __init__(self, kernel="mci", learning_rate=0.01, growing_criterion="dense", \
                  growing_param=None, loss_function="least_squares", \
                  loss_param=None, gamma=None, ksize=0.01, kernel_params=None, \
-                 correntropy_sigma=None, n_jobs=1):
+                 correntropy_sigma=None, n_jobs=1, dropout=0):
         
         self.n_jobs = n_jobs
         self.kernel = kernel
@@ -102,6 +103,7 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         self.centerIndex_ = []
         self.X_online_ = np.array([])
         self.X_transformed_ = np.array([])
+        self.dropout = dropout
         
     """
     TODO: add support for precomputed gram matrix to make fit_transform faster  
@@ -133,8 +135,9 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
             -------
             self : object
             Returns the instance itself.
+   
             """
-        
+ 
         Nend = len(X)
         N1 = 0
         # If initializing network
@@ -156,8 +159,11 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         # For initialized networks
         for k in xrange(N1,Nend):
             print k
-            gram = self._get_kernel(self.centers_,X[k])
-            self.X_online_[k] = np.dot(self.coeff_, gram)
+            _size             = self.coeff_.shape[0]
+            _n_in             = min(np.floor(_size*self.dropout), 1)
+            dropin            = np.random.permutation(_size)[_n_in]
+            gram              = self._get_kernel(self.centers_[dropin],X[k])
+            self.X_online_[k] = np.dot(self.coeff_[dropin], gram)
             self._trainNet(X[k], d[k]-self.X_online_[k],k)
         
         return self
@@ -177,7 +183,8 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         
         for i in xrange(len(Z)):
             print i
-            Z_out[i] = np.dot(self.coeff_, self._get_kernel(self.centers_,Z[i]))
+            Z_out[i] = (1-self.dropout)*\
+                       np.dot(self.coeff_, self._get_kernel(self.centers_,Z[i]))
     
         return Z_out
 
