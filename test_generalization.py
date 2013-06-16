@@ -24,7 +24,7 @@ input = ts.nest_2_input(spike_events, 3*T, time_window=time_window, \
 
 #sklms = SpikeKLMS(kernel="pop_mci", growing_criterion='novelty', growing_param=[2., 10.], ksize=5,learning_rate=.0005, n_jobs=4)
 sklms = SpikeKLMS(kernel="pop_mci", growing_criterion='quantized', \
-        growing_param=[0.], ksize=5, learning_rate=.0005, \
+        growing_param=[0], ksize=5, learning_rate=.0005, \
         loss_function='least_squares', correntropy_sigma=1., n_jobs=1, \
         gamma=.01, dropout=0)
 print sklms

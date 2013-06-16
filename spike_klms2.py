@@ -25,7 +25,7 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         important since regularizes the kernel method and, for a given data set, 
         define convergence time and misadjustment
 
-    growing_criterion: "dense" | "novelty" | "surprise"
+    growing_criterion: "dense" | "novelty" | "quantized" |"surprise"
         Default: "dense:"
 
     growing_param: float, float, optional
@@ -44,11 +44,6 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
     kernel_params : mapping of string to any, optional
         Parameters (keyword arguments) and values for kernel passed as
         callable object. Ignored by other kernels.
-
-    alpha: int
-        Hyperparameter of the ridge regression that learns the
-        inverse transform (when fit_inverse_transform=True).
-        Default: 1.0
 
     Attributes
     ----------
@@ -159,11 +154,9 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         # For initialized networks
         for k in xrange(N1,Nend):
             print k
-            _size             = self.coeff_.shape[0]
-            _n_in             = min(np.floor(_size*self.dropout), 1)
-            dropin            = np.random.permutation(_size)[_n_in]
-            gram              = self._get_kernel(self.centers_[dropin],X[k])
-            self.X_online_[k] = np.dot(self.coeff_[dropin], gram)
+            dropin_centers, dropin_coeff = self._dropout()
+            gram              = self._get_kernel(dropin_centers,X[k])
+            self.X_online_[k] = np.dot(dropin_coeff, gram)
             self._trainNet(X[k], d[k]-self.X_online_[k],k)
         
         return self
@@ -183,8 +176,7 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         
         for i in xrange(len(Z)):
             print i
-            Z_out[i] = (1-self.dropout)*\
-                       np.dot(self.coeff_, self._get_kernel(self.centers_,Z[i]))
+            Z_out[i] = np.dot(self.coeff_, self._get_kernel(self.centers_,Z[i]))
     
         return Z_out
 
@@ -221,6 +213,9 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
                                     self._loss_derivative(err))
             self.centerIndex_ = k
         else:
+            #===========================
+            #     DENSE GROW
+            #===========================
             if self.growing_criterion == "dense":
                 self.centers_.append(newX)                
                 self.coeff_ = np.append(self.coeff_, self.learning_rate *
@@ -228,9 +223,9 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
                 self.centerIndex_ = [self.centerIndex_, k]
                 if self.kernel=='eig_mci' or self.kernel=='eig_nci':
                     self._appendEIG(newX)
-                    #self.eig11.append(slash._eigdecompose_population(newX,\
-                                      #spike_kernel=self.kernel[4:]))
-
+            #===========================
+            #     NOVELTY GROW
+            #===========================
             elif self.growing_criterion == "novelty":
                 distanc = slash.ppMCIdistance(self.centers_, newX, \
                                              ksize=self.ksize, pMCI11=self.mci11)
@@ -244,12 +239,32 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
                     self._appendMCI(newX)
                     if self.kernel=='eig_mci' or self.kernel=='eig_nci':
                         self._appendEIG(newX)
-                        #self.eig11.append(slash._eigdecompose_population(newX,\
-                        #                  spike_kernel=self.kernel[4:]))
+            #===========================
+            #     QUANTIZED GROW
+            #===========================
+            elif self.growing_criterion == "quantized":
+                distanc = slash.ppMCIdistance(self.centers_, newX, \
+                                             ksize=self.ksize, pMCI11=self.mci11)
+                if np.min(distanc)<= self.growing_param[0]:
+                    _min_idx = np.where(distanc == np.min(distanc))
+                    self.coeff_[_min_idx] += self.learning_rate * \
+                            self._loss_derivative(err)
+                else:
+                    self.centers_.append(newX)
+                    self.coeff_ = np.append(self.coeff_, self.learning_rate *
+                                           self._loss_derivative(err))
+                    self.centerIndex_.append(k)
+                    self._appendMCI(newX)
+                    if self.kernel=='eig_mci' or self.kernel=='eig_nci':
+                        self._appendEIG(newX)
+        
         return self
 
     def _loss_derivative(self,err):
-        """ Evaluate the derivative of loss_function on d, y """
+        """ 
+        Evaluate the derivative of loss_function on d, y 
+        
+        """
         if self.loss_function == "least_squares":
             return err
         elif self.loss_function == "minimum_correntropy":
@@ -258,9 +273,10 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
             raise Exception("Invalid loss function: %s" % self.loss_function)
             
     def _appendMCI(self, newX):
-    #    """Save precalculated data about centers to avoid repetitive
-    #       calculations at SLASH Level II
-    #    """
+        """Save precalculated data about centers to avoid repetitive
+           calculations at SLASH Level II
+    
+        """
         newXx = slash.check_population(newX)
         MCI11 = [list() for i in range(len(newXx))]
         for i in xrange(len(newXx)):
@@ -277,3 +293,30 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         else:
             self.eig11 = np.hstack([self.eig11, EXx])
         return self
+
+    def _dropout(self):
+        """
+        Drops out some filters to enhance generalization
+
+        """
+        net_size = self.coeff_.shape[0]
+        shuf_idx = np.random.permutation(net_size)
+        if self.dropout==0:
+            dropin = range(net_size)
+        elif self.dropout>=0 and self.dropout<1: # if dropout is probability
+            _bigger = max(1 , (net_size*self.dropout) ) 
+            dropin  = shuf_idx[:_bigger]
+        
+        elif isinstance(self.dropout, int): # if dropout is number of units to keep
+            _smaller = min(net_size, self.dropout)
+            dropin = shuf_idx[:_smaller]
+        else:
+            raise Exception('dropout should be int or prabability')
+        
+        dropin_centers = range(len(dropin))
+        #dropin_coeff   = np.zeros(len(dropin))
+        dropin_coeff = self.coeff_[dropin]
+        for i in xrange(len(dropin)):
+            dropin_centers[i] = self.centers_[dropin[i]]
+            #dropin_coeff[i]      = self.coeff_[dropin[i]]
+        return dropin_centers, dropin_coeff

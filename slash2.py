@@ -23,7 +23,9 @@ from sklearn.externals.joblib import Parallel
 from sklearn.externals.joblib import delayed
 from sklearn.externals.joblib.parallel import cpu_count
 from sklearn.utils import gen_even_slices
-
+import pyximport
+pyximport.install(setup_args={'include_dirs':[np.get_include()]})
+import fast_slash as fs
 
 """
 ====================
@@ -95,9 +97,10 @@ def sMCI(x, y, ksize):
 
     assert (ksize>0. and np.isreal(ksize)), "Kernel size must be non-negative real"
 
-    v = pairwise_l1(x, y)
-    v = np.exp(-v/ksize)
-    v = v.sum()
+    #v = pairwise_l1(x, y)
+    #v = np.exp(-v/ksize)
+    #v = v.sum()
+    v = fs.mci(x, y, ksize)
     
     return v
 
@@ -250,9 +253,15 @@ def ppMCI(Xx,Y, ksize):
     Xx = check_list_population(Xx)
     Y  = check_population(Y)
     V = np.zeros(len(Xx))
+    for i in xrange( len(Xx) ):
+        for k in xrange( len(Xx[i]) ):
+            Xx[i][k] = check_spike_train(Xx[i][k])
+    for i in xrange( len(Y) ):
+        Y[i] = check_spike_train(Y[i])
     for i in xrange(len(Xx)):
         for k in xrange(len(Y)):
             V[i] = V[i] + sMCI(Xx[i][k], Y[k], ksize)
+    #V = fs.ppmci(np.ndarray(Xx), np.ndarray(Y), int(len(Xx)), int(len(Y)), ksize)
     
     return V
 

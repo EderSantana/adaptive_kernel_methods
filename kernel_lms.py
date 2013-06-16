@@ -20,7 +20,7 @@ class KernelLMS(BaseEstimator, TransformerMixin):
     learning_rate: float
         Step size for gradient descent adaptation. This parameter is very important since regularizes the kernel method and, for a given data set, define convergence time and misadjustment
 
-    growing_criterion: "dense" | "novelty" | "surprise"
+    growing_criterion: "dense" | "novelty" | "quantized" | "surprise"
         Default: "dense:"
 
     growing_param: float, float, optional
@@ -80,10 +80,10 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         The Kernel LMS algorithm by Weifeng Liu et. al.
     """
 
-    def __init__(self, kernel="rbf", learning_mode="regression", learning_rate=0.01, \
-                 growing_criterion="dense", growing_param=None, loss_function="least_squares", \
-                 loss_param=None, gamma=None, degree=3, coef0=1, kernel_params=None, \
-                 correntropy_sigma=None):
+    def __init__(self, kernel="rbf", learning_mode="regression", \
+            learning_rate=0.01, growing_criterion="dense", growing_param=None, \
+            loss_function="least_squares", loss_param=None, gamma=None, degree=3, \
+            coef0=1, kernel_params=None, correntropy_sigma=None, dropout=0):
         self.kernel = kernel
         self.l_mode = learning_mode
         self.kernel_params = kernel_params
@@ -102,6 +102,7 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         self.growing_param = growing_param
         self.correntropy_sigma = correntropy_sigma
         self.XX = 0
+        self.dropout = dropout
 
  
     """
@@ -140,7 +141,7 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         N1 = 0
         # If initializing network
         if self.centers_.shape[0]==0:
-            self.centers_ = X[0]
+            self.centers_ = X[0][np.newaxis]
             if self.growing_criterion != "dense":
                 self.XX = (self.centers_*self.centers_).sum()
             self.centerIndex_ = [0]
@@ -151,8 +152,15 @@ class KernelLMS(BaseEstimator, TransformerMixin):
     
         # For initialized networks
         for k in xrange(N1,Nend):
-            gram = self._get_kernel(self.centers_, X[k])
-            self.X_online_[k] = np.dot(self.coeff_, gram)
+            #if (k%1000)==0:
+            print k
+            dropin_centers, dropin_coeff = self._dropout()
+            gram              = self._get_kernel(dropin_centers,X[k])
+            self.X_online_[k] = np.dot(dropin_coeff, gram)
+            #self._trainNet(X[k], d[k]-self.X_online_[k],k, self.XX)
+
+            #gram = self._get_kernel(self.centers_, X[k])
+            #self.X_online_[k] = np.dot(self.coeff_, gram)
             if err is None:            
                 self._trainNet(X[k], d[k] - self.X_online_[k],k,self.XX)
             else:
@@ -230,6 +238,9 @@ class KernelLMS(BaseEstimator, TransformerMixin):
             self.centerIndex_ = [k]
     
         else:
+            #===========================
+            #     DENSE GROW
+            #===========================
             if self.growing_criterion == "dense":
                 self.centers_ = np.vstack([self.centers_, newX])
                     #self.coeff_ = np.append(self.coeff_, self.learning_rate *
@@ -250,6 +261,9 @@ class KernelLMS(BaseEstimator, TransformerMixin):
                
                 self.centerIndex_.append(k)
 
+            #===========================
+            #     NOVELTY GROW
+            #===========================
             elif self.growing_criterion == "novelty":
                 """ 
                 The calculation of the euclidean distances were taking to much time.
@@ -257,12 +271,30 @@ class KernelLMS(BaseEstimator, TransformerMixin):
                 things up.
                     
                 """
-                distanc = euclidean_distances(newX, self.centers_,
-                                              Y_norm_squared=self.XX,                                 squared=True)
+                distanc = euclidean_distances(newX, self.centers_, \
+                        Y_norm_squared=self.XX,squared=True)
  
-                if np.max(distanc)>self.growing_param[0] and np.abs(err)>self.growing_param[1]:
+                if np.max(distanc)>self.growing_param[0] and \
+                        np.abs(err)>self.growing_param[1]:
                     self.centers_ = np.vstack([self.centers_, newX])
-                    self.coeff_ = np.append(self.coeff_, self.learning_rate *
+                    self.coeff_ = np.append(self.coeff_, self.learning_rate * \
+                                           self._loss_derivative(err))
+                    self.centerIndex_.append(k)
+                    self.XX = (self.centers_**2).sum(axis=1)
+
+            #===========================
+            #     QUANTIZED GROW
+            #===========================
+            elif self.growing_criterion == "quantized":
+                distanc = euclidean_distances(newX, self.centers_, \
+                        Y_norm_squared=self.XX, squared=True)
+                if np.min(distanc) <= self.growing_param[0]:
+                    _min_idx = np.where(distanc==np.min(distanc))
+                    self.coeff_[_min_idx] += self.learning_rate * \
+                                             self._loss_derivative(err)
+                else:
+                    self.centers_ = np.vstack([self.centers_, newX])
+                    self.coeff_ = np.append(self.coeff_, self.learning_rate * \
                                            self._loss_derivative(err))
                     self.centerIndex_.append(k)
                     self.XX = (self.centers_**2).sum(axis=1)
@@ -293,6 +325,29 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         self.XX = np.array([])
         
         return self
+    def _dropout(self):
+        net_size = self.coeff_.shape[0]
+        shuf_idx = np.random.permutation(net_size)
+        if self.dropout==0:
+            dropin = range(net_size)
+        elif self.dropout>0 and self.dropout<1: # if dropout is probability
+            _bigger = max(1 , np.floor(net_size*self.dropout) ) 
+            dropin  = shuf_idx[:_bigger]
+        
+        elif isinstance(self.dropout, int): # if dropout is number of units to keep
+            _smaller = min(net_size, self.dropout)
+            dropin = shuf_idx[:_smaller]
+        else:
+            raise Exception('dropout should be int or prabability')
+        
+        dropin_centers = self.centers_[dropin,:]
+        dropin_coeff   = self.coeff_[dropin]
+        #dropin_centers = range(len(dropin))
+        #dropin_coeff   = np.zeros(len(dropin))
+        #for i in xrange(len(dropin)):
+            #dropin_centers[i] = self.centers_[dropin[i],:]
+            #dropin_coeff[i]   = self.coeff_[dropin[i]]
+        return dropin_centers, dropin_coeff
 
 def _sigmoid(y,derivative_order):
     exp_y = np.exp(-y)
