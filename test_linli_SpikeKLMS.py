@@ -11,7 +11,7 @@ from sklearn.preprocessing import scale
 pl.close('all')
 
 time_step = 2
-time_window = [-50, 20]
+time_window = [-80, 50]
 T = 2000
 simulation = np.load('linli_generalization.npy')
 spike_events = simulation[:-1]
@@ -23,16 +23,35 @@ input = ts.nest_2_input(spike_events, 3*T, time_window=time_window, \
         time_step=time_step)
 
 #sklms = SpikeKLMS(kernel="pop_mci", growing_criterion='novelty', growing_param=[2., 10.], ksize=5,learning_rate=.0005, n_jobs=4)
-sklms = SpikeKLMS(kernel="pop_mci", growing_criterion='quantized', \
-        growing_param=[0.], ksize=5, learning_rate=.0005, \
+sklms = SpikeKLMS(kernel="pop_mci", growing_criterion='dense', \
+        growing_param=[0], ksize=5, learning_rate=.0005, \
         loss_function='least_squares', correntropy_sigma=1., n_jobs=1, \
         gamma=.01, dropout=0)
 print sklms
 
-for i in range(3):
-    sklms.fit(input[:T/2], target[:T/2])
+# SKLMS with linear outter layer
+sklms.fit_transform(input[:2], target[:2])
+w = np.random.randn(2)
+for i in range(2,T/2):
+    print i
+    dropin_centers, dropin_coeff = sklms._dropout()
+    gram                         = sklms._get_kernel(dropin_centers,input[i])
+    sklms.X_online_              = np.hstack([sklms.X_online_, \
+                                   np.dot(dropin_coeff, gram)])
 
-sklms.X_transformed_ = sklms.transform(input)
+    xout = sklms.X_online_[i]
+    yout = w[0]*xout + w[1]
+    e = target[i]-yout
+    w[0] = w[0] + .001*e*xout
+    w[1] = w[1] + .001*e
+    err = e*w[0]
+    sklms._trainNet(input[i], err,i)
+
+
+#for i in range(3):
+#sklms.fit(input[:T/2], target[:T/2])
+
+sklms.X_transformed_ = w[1]+w[0]*sklms.transform(input)
 G = gridspec.GridSpec(3,1)
 pl.figure()
 pl.subplot(G[:-1])
