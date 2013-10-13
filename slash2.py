@@ -253,6 +253,7 @@ def ppMCI(Xx,Y, ksize):
     Xx = check_list_population(Xx)
     Y  = check_population(Y)
     V = np.zeros(len(Xx))
+    #V = np.ones(len(Xx))
     for i in xrange( len(Xx) ):
         for k in xrange( len(Xx[i]) ):
             Xx[i][k] = check_spike_train(Xx[i][k])
@@ -280,6 +281,7 @@ def ppMCIdistance(Xx,Y, ksize, pMCI11=None, MCI22=None):
             MCI22[k] = sMCI(Y[k], Y[k], ksize)
 
     V = np.zeros(len(Xx))
+    #V = np.ones(len(Xx))
     for i in xrange(len(Xx)):
         for k in xrange(len(Y)):
             V[i] = V[i] + sMCIdistance(Xx[i][k], Y[k], ksize, mci11=pMCI11[i][k], \

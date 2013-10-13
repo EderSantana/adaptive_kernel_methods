@@ -172,7 +172,7 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         -------
         Z_out: array-like, shape (n_samples)
         """
-        Z_out = np.zeros_like(Z)
+        Z_out = np.zeros(len(Z))
         
         for i in xrange(len(Z)):
             print i

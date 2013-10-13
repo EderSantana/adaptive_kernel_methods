@@ -103,6 +103,7 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         self.correntropy_sigma = correntropy_sigma
         self.XX = 0
         self.dropout = dropout
+		self.backprop_ = np.array([])
 
  
     """
@@ -157,7 +158,7 @@ class KernelLMS(BaseEstimator, TransformerMixin):
             dropin_centers, dropin_coeff = self._dropout()
             gram              = self._get_kernel(dropin_centers,X[k])
             self.X_online_[k] = np.dot(dropin_coeff, gram)
-            #self._trainNet(X[k], d[k]-self.X_online_[k],k, self.XX)
+			#self._trainNet(X[k], d[k]-self.X_online_[k],k, self.XX)
 
             #gram = self._get_kernel(self.centers_, X[k])
             #self.X_online_[k] = np.dot(self.coeff_, gram)
@@ -298,7 +299,27 @@ class KernelLMS(BaseEstimator, TransformerMixin):
                                            self._loss_derivative(err))
                     self.centerIndex_.append(k)
                     self.XX = (self.centers_**2).sum(axis=1)
-                        
+             
+            #===========================
+            #  STOCHASTIC QUANTIZATION
+            #===========================
+            elif self.growing_criterion == "s_quantized":
+                distanc = euclidean_distances(newX, self.centers_, \
+                        Y_norm_squared=self.XX, squared=True)
+                if np.min(distanc) <= self.growing_param[0]:
+                    # Sample the quanta from a multinomial distribution
+                    mult_prob = distanc/np.mean(distanc)  
+                    mult_sample = np.random.multinomial(1, mult_prob, size=1)     
+                    self.coeff_[_min_idx] += self.learning_rate * \
+                                             self._loss_derivative(err)
+                else:
+                    self.centers_ = np.vstack([self.centers_, newX])
+                    self.coeff_ = np.append(self.coeff_, self.learning_rate * \
+                                           self._loss_derivative(err))
+                    self.centerIndex_.append(k)
+                    self.XX = (self.centers_**2).sum(axis=1)
+             
+
         return self
 
     def _loss_derivative(self,err):
@@ -348,6 +369,8 @@ class KernelLMS(BaseEstimator, TransformerMixin):
             #dropin_centers[i] = self.centers_[dropin[i],:]
             #dropin_coeff[i]   = self.coeff_[dropin[i]]
         return dropin_centers, dropin_coeff
+		
+		
 
 def _sigmoid(y,derivative_order):
     exp_y = np.exp(-y)
