@@ -98,6 +98,7 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         self.X_online_ = np.array([])
         self.X_transformed_ = np.array([])
         self.dropout = dropout
+        self.drop_scale_ = 1
         
     """
     TODO: add support for precomputed gram matrix to make fit_transform faster  
@@ -153,7 +154,8 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         for k in xrange(N1,Nend):
             print k
             dropin, dropin_coeff = self._dropout()
-            gram                 = self._get_kernel(X[dropin],X[k])
+            gram                 = self._get_kernel([X[_c] for _c in dropin]\
+                                                    ,X[k])
             self.X_online_[k]    = np.dot(dropin_coeff, gram)
             self._trainNet(X, X[k], d[k]-self.X_online_[k],k)
         
@@ -215,8 +217,9 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
             #     DENSE GROW
             #===========================
             if self.growing_criterion == "dense":
+                self.coeff_ = self.coeff_/self.coeff_.shape[0]
                 self.coeff_ = np.append(self.coeff_, self.learning_rate *
-                                        self._loss_derivative(err))
+                                        self._loss_derivative(err)/self.drop_scale_)
                 self.centerIndex_ = np.append(self.centerIndex_, k)
                 if self.kernel=='eig_mci' or self.kernel=='eig_nci':
                     self._appendEIG(newX)
@@ -338,7 +341,7 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         if self.dropout==0:
             dropin = range(net_size)
         elif self.dropout>=0 and self.dropout<1: # if dropout is probability
-            _bigger = max(1 , (net_size*self.dropout) ) 
+            _bigger = max(1 , np.floor(net_size*self.dropout) ) 
             dropin  = shuf_idx[:_bigger]
         
         elif isinstance(self.dropout, int): # if dropout is number of units to keep
@@ -347,5 +350,7 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         else:
             raise Exception('dropout should be int or prabability')
         
-        dropin_coeff = self.coeff_[dropin]
+        #dropin_coeff = self.coeff_[dropin]
+        dropin_coeff = [self.coeff_[_c] for _c in dropin]
+        self.drop_scale_ = net_size #/ len(dropin_coeff)
         return dropin, dropin_coeff
