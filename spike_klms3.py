@@ -352,5 +352,5 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
         
         #dropin_coeff = self.coeff_[dropin]
         dropin_coeff = [self.coeff_[_c] for _c in dropin]
-        self.drop_scale_ = net_size #/ len(dropin_coeff)
+        self.drop_scale_ = 1 #net_size #/ len(dropin_coeff)
         return dropin, dropin_coeff

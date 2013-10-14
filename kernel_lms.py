@@ -103,7 +103,8 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         self.correntropy_sigma = correntropy_sigma
         self.XX = 0
         self.dropout = dropout
-		self.backprop_ = np.array([])
+        self.backprop_ = np.array([])
+        self.drop_scale_ = 1.
 
  
     """
@@ -154,7 +155,7 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         # For initialized networks
         for k in xrange(N1,Nend):
             #if (k%1000)==0:
-            print k
+            #print k
             dropin_centers, dropin_coeff = self._dropout()
             gram              = self._get_kernel(dropin_centers,X[k])
             self.X_online_[k] = np.dot(dropin_coeff, gram)
@@ -248,8 +249,9 @@ class KernelLMS(BaseEstimator, TransformerMixin):
                     #                   self._loss_derivative(d, y))
 
                 if self.l_mode == "regression":
+                    #self.coeff_ = self.coeff_/self.coeff_.shape[0]
                     self.coeff_ = np.append(self.coeff_, self.learning_rate *
-                                        self._loss_derivative(err))
+                                        self._loss_derivative(err))#/self.drop_scale_)
                 elif self.l_mode == "classify":
                     #self.coeff_ = np.append(self.coeff_, \
                     #                    _sigmoid(y,1) * self.learning_rate * \
@@ -361,8 +363,10 @@ class KernelLMS(BaseEstimator, TransformerMixin):
         else:
             raise Exception('dropout should be int or prabability')
         
-        dropin_centers = self.centers_[dropin,:]
-        dropin_coeff   = self.coeff_[dropin]
+        dropin_centers   = [self.centers_[_c] for _c in dropin]
+        dropin_coeff     = [self.coeff_[_c] for _c in dropin]
+        self.drop_scale_ = net_size / len(dropin_coeff)
+             
         #dropin_centers = range(len(dropin))
         #dropin_coeff   = np.zeros(len(dropin))
         #for i in xrange(len(dropin)):

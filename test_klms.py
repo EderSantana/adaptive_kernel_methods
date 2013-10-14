@@ -20,9 +20,12 @@ dhat = d + n;
 klms  = []
 klms = KernelLMS(learning_rate=.9, gamma=1, growing_criterion="novelty", 
                  growing_param=[1,.4], loss_function="minimum_correntropy",
-                 correntropy_sigma=.4)
+                 correntropy_sigma=.4, dropout=.5)
 
 t1 = time.time()
 klms.fit_transform(X,dhat)
 t2 = time.time()
 print "Elapsed time = %f" % (t2-t1)
+
+plot(klms.X_transformed_)
+plot(d)
