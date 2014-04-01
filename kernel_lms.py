@@ -154,8 +154,8 @@ class KernelLMS(BaseEstimator, TransformerMixin):
     
         # For initialized networks
         for k in xrange(N1,Nend):
-            #if (k%1000)==0:
-            #print k
+            #if (k%100)==0:
+			#	print k # print number of iterations
             dropin_centers, dropin_coeff = self._dropout()
             gram              = self._get_kernel(dropin_centers,X[k])
             self.X_online_[k] = np.dot(dropin_coeff, gram)
@@ -250,8 +250,10 @@ class KernelLMS(BaseEstimator, TransformerMixin):
 
                 if self.l_mode == "regression":
                     #self.coeff_ = self.coeff_/self.coeff_.shape[0]
-                    self.coeff_ = np.append(self.coeff_, self.learning_rate *
-                                        self._loss_derivative(err))#/self.drop_scale_)
+                    self.coeff_ = np.append(self.coeff_\
+				    #/self.drop_scale_\
+				    , self.learning_rate *
+                                        self._loss_derivative(err))
                 elif self.l_mode == "classify":
                     #self.coeff_ = np.append(self.coeff_, \
                     #                    _sigmoid(y,1) * self.learning_rate * \
@@ -386,3 +388,4 @@ def _sigmoid(y,derivative_order):
         raise ("Dereivative order not defined")
     
     return sy
+

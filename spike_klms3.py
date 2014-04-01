@@ -87,9 +87,8 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
             if self.loss_function == "minimum_correntropy":
                 self.correntropy_sigma = correntropy_sigma
         self.growing_criterion = growing_criterion
-        if self.growing_criterion != "dense":
-            self.mci11 = list()        
-            self.growing_param = growing_param
+        self.mci11 = list()        
+        self.growing_param = growing_param
         self.gamma = gamma
         self.ksize = ksize
         self.eig11 = list()
@@ -217,9 +216,8 @@ class SpikeKLMS(BaseEstimator, TransformerMixin):
             #     DENSE GROW
             #===========================
             if self.growing_criterion == "dense":
-                self.coeff_ = self.coeff_/self.coeff_.shape[0]
                 self.coeff_ = np.append(self.coeff_, self.learning_rate *
-                                        self._loss_derivative(err)/self.drop_scale_)
+                                        self._loss_derivative(err))
                 self.centerIndex_ = np.append(self.centerIndex_, k)
                 if self.kernel=='eig_mci' or self.kernel=='eig_nci':
                     self._appendEIG(newX)
